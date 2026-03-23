@@ -1,0 +1,465 @@
+package de.andreasgerhard.pcblaserstudio.service;
+
+import de.andreasgerhard.pcblaserstudio.model.LaserSettings;
+import de.andreasgerhard.pcblaserstudio.model.Layer;
+import de.andreasgerhard.pcblaserstudio.model.ProcessingMode;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryCollection;
+import org.locationtech.jts.geom.Polygon;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.awt.*;
+import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Consumer;
+
+/**
+ * Generates Marlin-compatible GCODE from a Layer's SVG data.
+ * Uses image-based analysis for raster fill and JTS for outline offsets.
+ */
+public class GCodeGenerator {
+
+    private static final Logger log = LoggerFactory.getLogger(GCodeGenerator.class);
+
+    /**
+     * @param renderWidth   pixel width used for the analysis image and segment coordinates
+     * @param renderHeight  pixel height used for the analysis image and segment coordinates
+     */
+    public record GCodeResult(
+            String gcode,
+            List<int[][]> outlineSegments,
+            List<int[][]> fillSegments,
+            int lineCount,
+            long estimatedTimeSeconds,
+            double fileSizeKb,
+            int[] powerHistogram,
+            int renderWidth,    // coordinate space of the segments
+            int renderHeight
+    ) {}
+
+    /**
+     * Generate GCODE for a single layer.
+     * @param layer     the layer model
+     * @param parseResult  parsed SVG data
+     * @param renderWidth  pixel width of rendered image
+     * @param renderHeight pixel height of rendered image
+     * @param progressCallback  optional callback (0-100)
+     */
+    public static GCodeResult generate(
+            Layer layer,
+            SvgParser.SvgParseResult parseResult,
+            int renderWidth,
+            int renderHeight,
+            Consumer<Integer> progressCallback
+    ) {
+        LaserSettings ls = layer.getLaserSettings();
+        boolean engraveBlack = layer.getProcessingMode() == ProcessingMode.BLACK_AREA;
+
+        // ── 1. Determine the Batik rendering bounds ──────────────────────────
+        // Batik converts SVG units (mm, cm, pt …) to device pixels internally.
+        // JTS geometries and renderToImage() both operate in this pixel space,
+        // so we must use it as our common coordinate system.
+        Rectangle2D batikBounds = parseResult.graphicsNode().getBounds();
+        double batikW, batikH;
+        if (batikBounds != null && batikBounds.getWidth() > 0 && batikBounds.getHeight() > 0) {
+            batikW = batikBounds.getWidth();
+            batikH = batikBounds.getHeight();
+        } else {
+            // Fallback: SVG uses px units → Batik renders 1:1
+            batikW = parseResult.svgWidth();
+            batikH = parseResult.svgHeight();
+        }
+
+
+        // Scale Batik bounds to the requested render size, preserving aspect ratio.
+        // This matches exactly what renderToImage() does, so there is NO centering
+        // offset and coordinates in the analysis image map 1:1 to segment coordinates.
+        double batikScale = Math.min((double) renderWidth / batikW,
+                                     (double) renderHeight / batikH);
+        int actualW = Math.max(1, (int) Math.round(batikW * batikScale));
+        int actualH = Math.max(1, (int) Math.round(batikH * batikScale));
+
+        if (progressCallback != null) progressCallback.accept(5);
+        BufferedImage img = SvgParser.renderToImage(parseResult, actualW, actualH);
+
+        // ── 2. Laser parameters in pixel space ───────────────────────────────
+        // Physical size of the rendered content:
+        //   Batik device pixel = 1/96 inch = 25.4/96 mm  →  1 mm = 96/25.4 ≈ 3.7795 Batik px
+        // So: contentWidthMm = batikW / 3.7795  and  mmPerRenderPx = contentWidthMm / actualW
+        final double MM_PER_BATIK_PX = 25.4 / 96.0;
+        double contentWidthMm  = batikW * MM_PER_BATIK_PX;
+        double contentHeightMm = batikH * MM_PER_BATIK_PX;
+        double pxPerMm         = actualW / contentWidthMm;
+
+        // laserRadiusPx may be negative (user-requested expansion to protect fine elements)
+        int laserRadiusPx  = (int) Math.round(ls.getRadiusMm() * pxPerMm);
+        int stepoverPx     = Math.max(1, (int) Math.round(ls.getStepoverMm()  * pxPerMm));
+        int power          = (int) Math.round(ls.getPowerPercent() * 10.0); // S0–S1000
+        int feedRate       = (int) ls.getFeedRateMmPerMin();
+        int contourPower   = (int) Math.round(ls.getContourPowerPercent() * 10.0);
+        int contourFeedRate= (int) ls.getContourFeedRateMmPerMin();
+
+        // ── 3. Analyse image pixels ──────────────────────────────────────────
+        boolean[][] engrave = analyzeImage(img, engraveBlack);
+        // Apply morphological compensation based on radius:
+        //   positive radius → erosion: laser centre stays ≥radius away from non-engraved boundary
+        //   negative radius → dilation: laser expands into boundary to protect fine elements
+        if (laserRadiusPx != 0) {
+            engrave = applyMorphology(engrave, laserRadiusPx);
+        }
+        if (progressCallback != null) progressCallback.accept(25);
+
+        // ── 4. Fill segments (raster) – in actualW × actualH space ──────────
+        List<int[][]> fillSegs = generateRasterSegments(engrave, stepoverPx, actualW, actualH);
+        if (progressCallback != null) progressCallback.accept(55);
+
+        // ── 5. Contour segments – boundary tracing on the engrave mask ──────────
+        // The mask-based approach traces the exact boundary of the post-morphology
+        // engrave mask, so the contour accounts for the spot-radius compensation
+        // and works for all shape types (filled areas AND stroked open traces).
+        // Consecutive boundary pixels in the same direction are merged into runs,
+        // keeping the segment count low and avoiding pixel-scale artefacts.
+        List<int[][]> outlineSegs = ls.isGenerateContour()
+                ? generateContoursFromMask(engrave, actualW, actualH)
+                : List.of();
+        if (progressCallback != null) progressCallback.accept(80);
+
+        // ── 6. Build GCODE string ────────────────────────────────────────────
+        StringBuilder sb = new StringBuilder();
+        sb.append("; PCB Laser Studio - Generated GCODE\n");
+        sb.append("; Layer: ").append(layer.getName()).append("\n");
+        sb.append("; Mode: ").append(layer.getProcessingMode().getDisplayName()).append("\n");
+        sb.append(String.format(Locale.ENGLISH,
+                "; Content size: %.3f x %.3f mm\n", contentWidthMm, contentHeightMm));
+        sb.append(String.format(Locale.ENGLISH,
+                "; Radius: %.3f mm, Stepover: %.3f mm\n", ls.getRadiusMm(), ls.getStepoverMm()));
+        sb.append(String.format(Locale.ENGLISH,
+                "; Feed: %d mm/min, Power: %.0f%%\n", feedRate, ls.getPowerPercent()));
+        sb.append(String.format(Locale.ENGLISH,
+                "; Offset: X=%.3f mm, Y=%.3f mm (lower-left corner)\n\n",
+                ls.getOffsetXMm(), ls.getOffsetYMm()));
+
+        // Pre-GCODE
+        if (layer.getGcodePrefix() != null && !layer.getGcodePrefix().isBlank()) {
+            sb.append("; ===== PRE-GCODE =====\n");
+            sb.append(layer.getGcodePrefix()).append("\n");
+        }
+
+        // Contour pass (outline inset by radius)
+        if (!outlineSegs.isEmpty()) {
+            sb.append("; ===== CONTOUR PASS (inset ").append(ls.getRadiusMm()).append(" mm) =====\n");
+            appendSegments(sb, outlineSegs, contourFeedRate, contourPower,
+                    contentWidthMm, contentHeightMm, actualW, actualH, true,
+                    ls.getOffsetXMm(), ls.getOffsetYMm());
+        }
+
+        // Fill / raster passes
+        if (!fillSegs.isEmpty()) {
+            sb.append("; ===== FILL PASS =====\n");
+            appendSegments(sb, fillSegs, feedRate, power,
+                    contentWidthMm, contentHeightMm, actualW, actualH, false,
+                    ls.getOffsetXMm(), ls.getOffsetYMm());
+        }
+
+        // Post-GCODE
+        if (layer.getGcodeSuffix() != null && !layer.getGcodeSuffix().isBlank()) {
+            sb.append("; ===== POST-GCODE =====\n");
+            sb.append(layer.getGcodeSuffix()).append("\n");
+        }
+
+        if (progressCallback != null) progressCallback.accept(100);
+
+        String gcode     = sb.toString();
+        int lineCount    = (int) gcode.lines().count();
+        double fileSizeKb = gcode.length() / 1024.0;
+
+        long totalMoves  = fillSegs.size() + outlineSegs.size();
+        long estSeconds  = totalMoves > 0 ? (totalMoves * 10L) / (feedRate / 60 + 1) : 0;
+
+        int[] histogram  = new int[101];
+        histogram[Math.min(100, (int) ls.getPowerPercent())] = lineCount;
+
+        log.info("GCODE generated: {} lines, {} KB, ~{} s", lineCount,
+                String.format("%.1f", fileSizeKb), estSeconds);
+
+        return new GCodeResult(gcode, outlineSegs, fillSegs,
+                lineCount, estSeconds, fileSizeKb, histogram,
+                actualW, actualH);
+    }
+
+    // =================== Pixel analysis ===================
+
+    private static boolean[][] analyzeImage(BufferedImage img, boolean engraveBlack) {
+        int w = img.getWidth(), h = img.getHeight();
+        boolean[][] result = new boolean[h][w];
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                Color c = new Color(img.getRGB(x, y), true);
+                if (c.getAlpha() < 128) { result[y][x] = !engraveBlack; continue; }
+                float brightness = (c.getRed() + c.getGreen() + c.getBlue()) / (3f * 255f);
+                result[y][x] = engraveBlack == (brightness < 0.5f);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Applies morphological erosion (radiusPx > 0) or dilation (radiusPx < 0)
+     * to the boolean engraving mask using an efficient separable box-filter.
+     *
+     * <ul>
+     *   <li><b>Erosion (positive radius):</b> a pixel is engraved only if <em>all</em>
+     *       pixels within the box window are also engraved. This keeps the laser centre
+     *       at least {@code radius} px away from non-engraved boundaries, preventing
+     *       the laser spot from overrunning fine structures.</li>
+     *   <li><b>Dilation (negative radius):</b> a pixel is marked as engraved if
+     *       <em>any</em> pixel within {@code |radius|} px is engraved. This expands
+     *       fine elements outward so they survive even when smaller than the laser
+     *       spot diameter.</li>
+     * </ul>
+     *
+     * Two-pass separable morphology (horizontal then vertical) using prefix sums
+     * gives O(h × w) complexity regardless of radius size.
+     */
+    private static boolean[][] applyMorphology(boolean[][] src, int radiusPx) {
+        if (radiusPx == 0) return src;
+        int h = src.length, w = src[0].length;
+        boolean dilate = radiusPx < 0;
+        int r = Math.abs(radiusPx);
+
+        // ── Horizontal pass ─────────────────────────────────────────────────
+        boolean[][] temp = new boolean[h][w];
+        for (int y = 0; y < h; y++) {
+            int[] prefix = new int[w + 1];
+            for (int x = 0; x < w; x++) prefix[x + 1] = prefix[x] + (src[y][x] ? 1 : 0);
+            for (int x = 0; x < w; x++) {
+                int lo = Math.max(0, x - r);
+                int hi = Math.min(w, x + r + 1);
+                int count = prefix[hi] - prefix[lo];
+                temp[y][x] = dilate ? (count > 0) : (count == hi - lo);
+            }
+        }
+
+        // ── Vertical pass ────────────────────────────────────────────────────
+        boolean[][] result = new boolean[h][w];
+        for (int x = 0; x < w; x++) {
+            int[] prefix = new int[h + 1];
+            for (int y = 0; y < h; y++) prefix[y + 1] = prefix[y] + (temp[y][x] ? 1 : 0);
+            for (int y = 0; y < h; y++) {
+                int lo = Math.max(0, y - r);
+                int hi = Math.min(h, y + r + 1);
+                int count = prefix[hi] - prefix[lo];
+                result[y][x] = dilate ? (count > 0) : (count == hi - lo);
+            }
+        }
+        return result;
+    }
+
+    // =================== Raster segments ===================
+
+    private static List<int[][]> generateRasterSegments(boolean[][] engrave, int stepoverPx, int w, int h) {
+        List<int[][]> segs = new ArrayList<>();
+        boolean leftToRight = true;
+        for (int y = 0; y < h; y += stepoverPx) {
+            List<int[]> runs = findRuns(engrave[y], w);
+            if (!runs.isEmpty()) {
+                if (leftToRight) {
+                    for (int[] run : runs) segs.add(new int[][]{{run[0], y}, {run[1], y}});
+                } else {
+                    for (int i = runs.size() - 1; i >= 0; i--) {
+                        int[] run = runs.get(i);
+                        segs.add(new int[][]{{run[1], y}, {run[0], y}});
+                    }
+                }
+                leftToRight = !leftToRight;
+            }
+        }
+        return segs;
+    }
+
+    private static List<int[]> findRuns(boolean[] row, int w) {
+        List<int[]> runs = new ArrayList<>();
+        int start = -1;
+        for (int x = 0; x < w; x++) {
+            if (row[x] && start < 0)        { start = x; }
+            else if (!row[x] && start >= 0) { runs.add(new int[]{start, x - 1}); start = -1; }
+        }
+        if (start >= 0) runs.add(new int[]{start, w - 1});
+        return runs;
+    }
+
+    // =================== Outline / Contour segments ===================
+
+    /**
+     * Traces the boundary of the post-morphology {@code engrave} mask and returns
+     * axis-aligned (horizontal + vertical) contour segments.
+     *
+     * <p>The algorithm scans every inter-row and inter-column boundary line.
+     * Wherever the mask transitions from engraved to non-engraved (or vice-versa)
+     * it opens a new segment run; when the transition ends the run is closed and
+     * saved.  Consecutive touching boundary pixels in the same direction are
+     * automatically merged into a single longer segment, so the result is compact
+     * and free of pixel-scale artefacts.</p>
+     *
+     * <p>The approach works for <em>all</em> SVG element types – filled shapes,
+     * stroked open traces, copper pours – because it operates on the rasterised
+     * mask rather than the original vector geometry.  The mask already incorporates
+     * spot-radius morphological compensation, so the contour inherently respects
+     * the configured radius offset.</p>
+     *
+     * @param engrave  boolean mask [height][width]; {@code true} = pixel to be engraved
+     * @param w        mask width  (number of columns)
+     * @param h        mask height (number of rows)
+     * @return list of 2-point segments in image-pixel coordinates
+     */
+    private static List<int[][]> generateContoursFromMask(boolean[][] engrave, int w, int h) {
+        List<int[][]> segs = new ArrayList<>();
+
+        // ── Horizontal boundary lines ────────────────────────────────────────
+        // Scan y from 0 to h (inclusive).  The "line" at y sits between row y-1
+        // and row y.  A boundary exists at column x when the mask value changes
+        // across that line.
+        for (int y = 0; y <= h; y++) {
+            int runStart = -1;
+            for (int x = 0; x < w; x++) {
+                boolean above = (y > 0) && engrave[y - 1][x];
+                boolean below = (y < h) && engrave[y][x];
+                boolean edge  = above != below;          // transition → boundary
+                if (edge && runStart < 0) {
+                    runStart = x;                        // open a new run
+                } else if (!edge && runStart >= 0) {
+                    segs.add(new int[][]{{runStart, y}, {x, y}});
+                    runStart = -1;
+                }
+            }
+            if (runStart >= 0) {
+                segs.add(new int[][]{{runStart, y}, {w, y}});
+            }
+        }
+
+        // ── Vertical boundary lines ──────────────────────────────────────────
+        // Scan x from 0 to w (inclusive).  The "line" at x sits between column
+        // x-1 and column x.
+        for (int x = 0; x <= w; x++) {
+            int runStart = -1;
+            for (int y = 0; y < h; y++) {
+                boolean left  = (x > 0) && engrave[y][x - 1];
+                boolean right = (x < w) && engrave[y][x];
+                boolean edge  = left != right;
+                if (edge && runStart < 0) {
+                    runStart = y;
+                } else if (!edge && runStart >= 0) {
+                    segs.add(new int[][]{{x, runStart}, {x, y}});
+                    runStart = -1;
+                }
+            }
+            if (runStart >= 0) {
+                segs.add(new int[][]{{x, runStart}, {x, h}});
+            }
+        }
+
+        log.info("generateContoursFromMask: {} contour segments ({}×{} mask)", segs.size(), w, h);
+        return segs;
+    }
+
+    /**
+     * Converts JTS geometries to render-pixel contour segments, offset inward by
+     * {@code bufferDist} (negative = shrink). Kept as an alternative / reference
+     * implementation; not used in the default generation pipeline.
+     *
+     * @param bufferDist  buffer distance in Batik device-pixel space (negative = inset)
+     */
+    private static List<int[][]> generateContourSegments(
+            List<Geometry> geometries, double batikScale, double nodeX, double nodeY,
+            double bufferDist) {
+        List<int[][]> segs = new ArrayList<>();
+        log.info("generateContourSegments: {} geometries, bufferDist={}", geometries.size(), bufferDist);
+        for (Geometry g : geometries) {
+            if (g == null || g.isEmpty()) continue;
+            Geometry contour = g;
+            if (bufferDist != 0.0) {
+                try {
+                    Geometry buffered = g.buffer(bufferDist);
+                    if (buffered != null && !buffered.isEmpty()) {
+                        contour = buffered;
+                    } else {
+                        log.debug("Buffer result empty (dist={}), falling back to original geometry", bufferDist);
+                    }
+                } catch (Exception e) {
+                    log.warn("JTS buffer failed (dist={}): {} – falling back to original geometry", bufferDist, e.getMessage());
+                }
+            }
+            int before = segs.size();
+            processGeometry(contour, segs, batikScale, batikScale, nodeX, nodeY);
+            log.debug("  geometry {} → {} segments added", g.getGeometryType(), segs.size() - before);
+        }
+        log.info("generateContourSegments: {} total contour segments", segs.size());
+        return segs;
+    }
+
+    private static void processGeometry(Geometry g, List<int[][]> segs,
+                                        double sx, double sy, double offX, double offY) {
+        if (g == null || g.isEmpty()) return;
+        if (g instanceof Polygon poly) {
+            addRingSegments(poly.getExteriorRing().getCoordinates(), segs, sx, sy, offX, offY);
+            for (int i = 0; i < poly.getNumInteriorRing(); i++)
+                addRingSegments(poly.getInteriorRingN(i).getCoordinates(), segs, sx, sy, offX, offY);
+        } else if (g instanceof GeometryCollection gc) {
+            for (int i = 0; i < gc.getNumGeometries(); i++)
+                processGeometry(gc.getGeometryN(i), segs, sx, sy, offX, offY);
+        }
+        // LineString case intentionally omitted: shapeToGeometry only produces Polygons now
+    }
+
+    private static void addRingSegments(Coordinate[] coords, List<int[][]> segs,
+                                        double sx, double sy, double offX, double offY) {
+        for (int i = 0; i < coords.length - 1; i++) {
+            segs.add(new int[][]{
+                    {(int) Math.round((coords[i].x   - offX) * sx), (int) Math.round((coords[i].y   - offY) * sy)},
+                    {(int) Math.round((coords[i+1].x - offX) * sx), (int) Math.round((coords[i+1].y - offY) * sy)}
+            });
+        }
+    }
+
+    // =================== GCODE formatting ===================
+
+    private static void appendSegments(
+            StringBuilder sb, List<int[][]> segs, int feedRate, int power,
+            double svgW, double svgH, int renderW, int renderH, boolean isOutline,
+            double offsetXMm, double offsetYMm
+    ) {
+        // mm per render-pixel  (svgW mm spread over renderW pixels)
+        double mmPerPxX = svgW / renderW;
+        double mmPerPxY = svgH / renderH;
+        int[]   lastPos = null;
+        boolean laserOn = false;
+
+        for (int[][] seg : segs) {
+            int[] p1 = seg[0], p2 = seg[1];
+            double x1mm = p1[0] * mmPerPxX + offsetXMm, y1mm = p1[1] * mmPerPxY + offsetYMm;
+            double x2mm = p2[0] * mmPerPxX + offsetXMm, y2mm = p2[1] * mmPerPxY + offsetYMm;
+
+            boolean needsMove = lastPos == null || lastPos[0] != p1[0] || lastPos[1] != p1[1];
+            if (needsMove) {
+                if (laserOn) { sb.append("M5 ; Laser off\n"); laserOn = false; }
+                sb.append(String.format(Locale.ENGLISH, "G0 X%.3f Y%.3f ; Rapid move%s\n",
+                        x1mm, y1mm, isOutline ? " (contour)" : " (fill)"));
+            }
+            if (!laserOn) { sb.append(String.format(Locale.ENGLISH, "M3 S%d ; Laser on\n", power)); laserOn = true; }
+            sb.append(String.format(Locale.ENGLISH, "G1 X%.3f Y%.3f F%d\n", x2mm, y2mm, feedRate));
+            lastPos = p2;
+        }
+        if (laserOn) sb.append("M5 ; Laser off\n");
+        sb.append("\n");
+    }
+
+    public static String formatTime(long seconds) {
+        return String.format("%d:%02d min", seconds / 60, seconds % 60);
+    }
+}
+

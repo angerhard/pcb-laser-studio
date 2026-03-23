@@ -1,0 +1,148 @@
+# ============================================================
+#  PCB Laser Studio – .gitignore
+#  Java 17 · Maven · IntelliJ IDEA · Windows
+# ============================================================
+
+# ------------------------------------------------------------
+# Maven
+# ------------------------------------------------------------
+target/
+dependency-reduced-pom.xml
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+.mvn/timing.properties
+# Maven-Wrapper JAR wird NICHT ignoriert (Konvention)
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ------------------------------------------------------------
+# Java
+# ------------------------------------------------------------
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+# ------------------------------------------------------------
+# IntelliJ IDEA
+# ------------------------------------------------------------
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# Ausnahme: Projekt-weit geteilte Run-Konfigurationen können
+# optional eingecheckt werden – dann folgende Zeile anpassen:
+# !.idea/runConfigurations/
+
+# ------------------------------------------------------------
+# Eclipse
+# ------------------------------------------------------------
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache
+
+# ------------------------------------------------------------
+# NetBeans
+# ------------------------------------------------------------
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# ------------------------------------------------------------
+# VS Code
+# ------------------------------------------------------------
+.vscode/
+*.code-workspace
+
+# ------------------------------------------------------------
+# Kotlin (falls künftig genutzt)
+# ------------------------------------------------------------
+.kotlin/
+
+# ------------------------------------------------------------
+# Betriebssystem – Windows
+# ------------------------------------------------------------
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ------------------------------------------------------------
+# Betriebssystem – macOS
+# ------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# ------------------------------------------------------------
+# Betriebssystem – Linux
+# ------------------------------------------------------------
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ------------------------------------------------------------
+# Logs & temporäre Dateien
+# ------------------------------------------------------------
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.orig
+
+# ------------------------------------------------------------
+# Projektspezifisch – PCB Laser Studio
+# ------------------------------------------------------------
+# Exportierte GCode-Dateien (werden on-the-fly erzeugt)
+*.gcode
+*.nc
+*.ngc
+
+# Nutzerspezifische Einstellungen / letzte Sitzungspfade
+user-prefs.json
+last-session.json
+
+# Exportierte / importierte SVG-Arbeitskopien
+# (echte Quell-SVGs können eingecheckt werden – daher auskommentiert)
+# *.svg
+
+# Projektdateien können eingecheckt werden – daher auskommentiert
+# *.pcblaser
+
+# ------------------------------------------------------------
+# Statische Analyseberichte (SonarQube, Checkstyle, PMD …)
+# ------------------------------------------------------------
+.sonar/
+target/sonar/
+checkstyle-result.xml
+pmd.xml
+spotbugs.xml
+
