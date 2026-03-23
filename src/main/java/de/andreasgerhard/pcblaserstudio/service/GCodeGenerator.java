@@ -367,41 +367,6 @@ public class GCodeGenerator {
         return segs;
     }
 
-    /**
-     * Converts JTS geometries to render-pixel contour segments, offset inward by
-     * {@code bufferDist} (negative = shrink). Kept as an alternative / reference
-     * implementation; not used in the default generation pipeline.
-     *
-     * @param bufferDist  buffer distance in Batik device-pixel space (negative = inset)
-     */
-    private static List<int[][]> generateContourSegments(
-            List<Geometry> geometries, double batikScale, double nodeX, double nodeY,
-            double bufferDist) {
-        List<int[][]> segs = new ArrayList<>();
-        log.info("generateContourSegments: {} geometries, bufferDist={}", geometries.size(), bufferDist);
-        for (Geometry g : geometries) {
-            if (g == null || g.isEmpty()) continue;
-            Geometry contour = g;
-            if (bufferDist != 0.0) {
-                try {
-                    Geometry buffered = g.buffer(bufferDist);
-                    if (buffered != null && !buffered.isEmpty()) {
-                        contour = buffered;
-                    } else {
-                        log.debug("Buffer result empty (dist={}), falling back to original geometry", bufferDist);
-                    }
-                } catch (Exception e) {
-                    log.warn("JTS buffer failed (dist={}): {} – falling back to original geometry", bufferDist, e.getMessage());
-                }
-            }
-            int before = segs.size();
-            processGeometry(contour, segs, batikScale, batikScale, nodeX, nodeY);
-            log.debug("  geometry {} → {} segments added", g.getGeometryType(), segs.size() - before);
-        }
-        log.info("generateContourSegments: {} total contour segments", segs.size());
-        return segs;
-    }
-
     private static void processGeometry(Geometry g, List<int[][]> segs,
                                         double sx, double sy, double offX, double offY) {
         if (g == null || g.isEmpty()) return;

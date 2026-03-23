@@ -69,6 +69,5 @@ public class LayerTabComponent extends JPanel {
         refresh();
     }
 
-    public void setOnEnabledChanged(Consumer<Layer> cb) { this.onEnabledChanged = cb; }
 }
 

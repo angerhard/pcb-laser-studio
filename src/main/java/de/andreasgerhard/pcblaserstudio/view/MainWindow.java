@@ -108,8 +108,6 @@ public class MainWindow extends JFrame {
         return layerTabs.get(idx);
     }
 
-    public int getActiveTabIndex() { return tabbedPane.getSelectedIndex(); }
-
     public List<LayerTab> getAllTabs() { return layerTabs; }
 
     public void refreshTabHeaders() {

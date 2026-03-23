@@ -72,7 +72,7 @@ public class SvgParser {
         return buildResult(doc, dummyUri);
     }
 
-    private static SvgParseResult buildResult(Document doc, String uri) throws Exception {
+    private static SvgParseResult buildResult(Document doc, String uri) {
         UserAgentAdapter userAgent = new UserAgentAdapter();
         DocumentLoader loader = new DocumentLoader(userAgent);
         BridgeContext ctx = new BridgeContext(userAgent, loader);

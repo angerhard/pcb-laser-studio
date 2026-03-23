@@ -268,7 +268,7 @@ public class MainController {
 
         new SwingWorker<GCodeGenerator.GCodeResult, Integer>() {
             @Override
-            protected GCodeGenerator.GCodeResult doInBackground() throws Exception {
+            protected GCodeGenerator.GCodeResult doInBackground() {
                 return GCodeGenerator.generate(layer, parseResult, 4096, 4096, this::publish);
             }
 

@@ -76,7 +76,6 @@ public class GCodePrePostPanel extends JPanel {
         if (onChange != null) onChange.accept(layer);
     }
 
-    public void setOnChange(Consumer<Layer> cb) { this.onChange = cb; }
     public void setOnApplyToAll(Consumer<Void> cb) { this.onApplyToAll = cb; }
 
     private static JTextArea createTextArea(String defaultText) {

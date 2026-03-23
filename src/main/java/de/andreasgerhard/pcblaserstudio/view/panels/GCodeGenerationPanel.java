@@ -130,9 +130,6 @@ public class GCodeGenerationPanel extends JPanel {
         btnExportProject.addActionListener(e -> cb.onExportProject());
     }
 
-    public JButton getBtnGenerateActive() { return btnGenerateActive; }
-    public JButton getBtnGenerateAll()    { return btnGenerateAll; }
-
     public void setProgress(int value, String text) {
         SwingUtilities.invokeLater(() -> {
             progressBar.setValue(value);
