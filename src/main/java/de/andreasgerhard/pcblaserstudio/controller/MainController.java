@@ -36,6 +36,7 @@ public class MainController {
 
     public void initialize() {
         project = new Project();
+        project.clearDirty(); // default layer setup shouldn't count as unsaved changes
         window  = new MainWindow();
 
         window.initTabs(project);
@@ -93,11 +94,23 @@ public class MainController {
             window.updateTitle(project);
         });
 
-        // Laser settings changes → clear cached gcode
+        // Laser settings changes → clear cached gcode, mark project dirty
         active.toolPanel.laserParametersPanel.setOnChange(settings -> {
+            active.getLayer().setDirty(true);
             gcodeCache.remove(active.getLayer().getId());
             active.gcodeCanvas.clearGcodeResult();
             active.toolPanel.updateGcodeStats(null);
+            window.updateTitle(project);
+            window.refreshTabHeaders();
+        });
+
+        // GCode pre/post changes → clear cached gcode
+        active.toolPanel.gcodePrePostPanel.setOnChange(layer -> {
+            gcodeCache.remove(active.getLayer().getId());
+            active.gcodeCanvas.clearGcodeResult();
+            active.toolPanel.updateGcodeStats(null);
+            window.updateTitle(project);
+            window.refreshTabHeaders();
         });
 
         // GCode pre/post panel → apply to all layers
@@ -107,6 +120,7 @@ public class MainController {
             for (Layer layer : project.getLayers()) {
                 layer.setGcodePrefix(prefix);
                 layer.setGcodeSuffix(suffix);
+                gcodeCache.remove(layer.getId());
             }
             window.setStatus("GCODE prefix/suffix applied to all layers");
         });
@@ -140,20 +154,25 @@ public class MainController {
     }
 
     private void findAndWireButtons(LayerTab tab) {
-        // Walk the GCodeGenerationPanel component tree for named buttons/checkboxes
+        // Walk the GCodeGenerationPanel component tree for named buttons/checkboxes.
+        // wireOnce() prevents duplicate listeners when a tab is re-selected.
         walkComponents(tab.toolPanel.gcodeGenerationPanel, c -> {
             String name = c.getName();
             if (name == null) return;
             switch (name) {
-                case "zoom.fit"      -> ((AbstractButton)c).addActionListener(e -> tab.dualCanvas.fitToWindow());
-                case "zoom.in"       -> ((AbstractButton)c).addActionListener(e -> tab.dualCanvas.zoomIn());
-                case "zoom.out"      -> ((AbstractButton)c).addActionListener(e -> tab.dualCanvas.zoomOut());
-                case "zoom.100"      -> ((AbstractButton)c).addActionListener(e -> tab.dualCanvas.zoom100());
-                case "vis.svg"       -> ((JCheckBox)c).addActionListener(e -> tab.svgCanvas.setShowSvg(((JCheckBox)c).isSelected()));
-                case "vis.outlines"  -> ((JCheckBox)c).addActionListener(e -> tab.gcodeCanvas.setShowOutlines(((JCheckBox)c).isSelected()));
-                case "vis.fill"      -> ((JCheckBox)c).addActionListener(e -> tab.gcodeCanvas.setShowFill(((JCheckBox)c).isSelected()));
+                case "zoom.fit"      -> wireOnce((AbstractButton)c, e -> tab.dualCanvas.fitToWindow());
+                case "zoom.in"       -> wireOnce((AbstractButton)c, e -> tab.dualCanvas.zoomIn());
+                case "zoom.out"      -> wireOnce((AbstractButton)c, e -> tab.dualCanvas.zoomOut());
+                case "zoom.100"      -> wireOnce((AbstractButton)c, e -> tab.dualCanvas.zoom100());
+                case "vis.svg"       -> wireOnce((AbstractButton)c, e -> tab.svgCanvas.setShowSvg(((JCheckBox)c).isSelected()));
+                case "vis.outlines"  -> wireOnce((AbstractButton)c, e -> tab.gcodeCanvas.setShowOutlines(((JCheckBox)c).isSelected()));
+                case "vis.fill"      -> wireOnce((AbstractButton)c, e -> tab.gcodeCanvas.setShowFill(((JCheckBox)c).isSelected()));
             }
         });
+    }
+
+    private void wireOnce(AbstractButton button, java.awt.event.ActionListener listener) {
+        if (button.getActionListeners().length == 0) button.addActionListener(listener);
     }
 
     private void walkComponents(Container container, java.util.function.Consumer<Component> consumer) {
@@ -337,6 +356,7 @@ public class MainController {
     private void onNewProject() {
         if (!confirmDiscard()) return;
         project = new Project();
+        project.clearDirty(); // default layer setup shouldn't count as unsaved changes
         parseCache.clear();
         gcodeCache.clear();
         window.initTabs(project);
@@ -389,7 +409,8 @@ public class MainController {
         }
     }
 
-    private void onSaveProject(boolean saveAs) {
+    /** @return {@code false} if the save was cancelled or failed (caller should abort). */
+    private boolean onSaveProject(boolean saveAs) {
         File file = null;
         if (!saveAs && project.getFilePath() != null) {
             file = new File(project.getFilePath());
@@ -398,7 +419,7 @@ public class MainController {
             JFileChooser fc = createFileChooser("PCB Laser Projects", "pcblaser");
             fc.setSelectedFile(new File(
                     project.getMetadata().getName().replaceAll("[^a-zA-Z0-9]", "_") + ".pcblaser"));
-            if (fc.showSaveDialog(window) != JFileChooser.APPROVE_OPTION) return;
+            if (fc.showSaveDialog(window) != JFileChooser.APPROVE_OPTION) return false;
             file = fc.getSelectedFile();
             if (!file.getName().endsWith(".pcblaser")) {
                 file = new File(file.getAbsolutePath() + ".pcblaser");
@@ -408,10 +429,12 @@ public class MainController {
             ProjectSerializer.save(project, file);
             window.updateTitle(project);
             window.setStatus("Project saved: " + file.getAbsolutePath());
+            return true;
         } catch (IOException ex) {
             log.error("Save error", ex);
             JOptionPane.showMessageDialog(window, "Save failed: " + ex.getMessage(),
                     "Save Error", JOptionPane.ERROR_MESSAGE);
+            return false;
         }
     }
 
@@ -421,7 +444,9 @@ public class MainController {
                     "There are unsaved changes. Save before exit?",
                     "Exit", JOptionPane.YES_NO_CANCEL_OPTION);
             if (r == JOptionPane.CANCEL_OPTION) return;
-            if (r == JOptionPane.YES_OPTION) onSaveProject(false);
+            // If the user chose to save but cancels the file dialog or the save
+            // fails, abort the exit so no changes are silently lost.
+            if (r == JOptionPane.YES_OPTION && !onSaveProject(false)) return;
         }
         System.exit(0);
     }

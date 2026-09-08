@@ -130,45 +130,67 @@ public class DarkTheme {
         return border;
     }
 
+    /** Corner radius for the compact, rounded buttons. */
+    private static final int BTN_RADIUS = 8;
+
     public static JButton createButton(String text, String tooltip) {
-        JButton btn = new JButton(text);
-        btn.setFont(FONT_NORMAL);
+        return createButton(text, tooltip, BG_MEDIUM, TEXT_PRIMARY, BG_LIGHT, BG_MEDIUM);
+    }
+
+    public static JButton createAccentButton(String text, String tooltip) {
+        return createButton(text, tooltip, ACCENT, Color.WHITE, ACCENT_HOVER, ACCENT);
+    }
+
+    /** Compact, rounded button factory shared by the create*Button helpers. */
+    private static JButton createButton(String text, String tooltip,
+                                        Color bg, Color fg, Color hoverBg, Color normalBg) {
+        JButton btn = new RoundedButton(text, BTN_RADIUS, BG_LIGHT);
+        btn.setFont(FONT_SMALL);
         btn.setToolTipText(tooltip);
-        btn.setBackground(BG_MEDIUM);
-        btn.setForeground(TEXT_PRIMARY);
+        btn.setBackground(bg);
+        btn.setForeground(fg);
         btn.setFocusPainted(false);
-        btn.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(BG_LIGHT, 1),
-                BorderFactory.createEmptyBorder(4, 10, 4, 10)
-        ));
         btn.addMouseListener(new java.awt.event.MouseAdapter() {
             @Override
             public void mouseEntered(java.awt.event.MouseEvent e) {
-                btn.setBackground(BG_LIGHT);
+                btn.setBackground(hoverBg);
             }
             @Override
             public void mouseExited(java.awt.event.MouseEvent e) {
-                btn.setBackground(BG_MEDIUM);
+                btn.setBackground(normalBg);
             }
         });
         return btn;
     }
 
-    public static JButton createAccentButton(String text, String tooltip) {
-        JButton btn = createButton(text, tooltip);
-        btn.setBackground(ACCENT);
-        btn.setForeground(Color.WHITE);
-        btn.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mouseEntered(java.awt.event.MouseEvent e) {
-                btn.setBackground(ACCENT_HOVER);
-            }
-            @Override
-            public void mouseExited(java.awt.event.MouseEvent e) {
-                btn.setBackground(ACCENT);
-            }
-        });
-        return btn;
+    /**
+     * Compact button that paints a rounded background in {@code paintComponent}
+     * (i.e. <em>before</em> the label text is drawn), so the text stays visible.
+     */
+    private static final class RoundedButton extends JButton {
+        private final int radius;
+        private final Color outline;
+
+        RoundedButton(String text, int radius, Color outline) {
+            super(text);
+            this.radius = radius;
+            this.outline = outline;
+            setOpaque(false);
+            setContentAreaFilled(false);
+            setBorder(BorderFactory.createEmptyBorder(3, 8, 3, 8));
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(getBackground());
+            g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, radius, radius);
+            g2.setColor(outline);
+            g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, radius, radius);
+            g2.dispose();
+            super.paintComponent(g);
+        }
     }
 
     public static JLabel createLabel(String text) {

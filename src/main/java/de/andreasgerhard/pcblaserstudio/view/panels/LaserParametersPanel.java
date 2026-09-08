@@ -56,8 +56,8 @@ public class LaserParametersPanel extends JPanel {
     private boolean updating = false;
 
     public LaserParametersPanel() {
-        // Column: label | slider (grows) | value (fixed 58 px)
-        setLayout(new MigLayout("fillx, insets 8 8 8 8, gapy 2", "[110][grow][58]", ""));
+        // Column: label | slider (grows) | value (right-aligned)
+        setLayout(new MigLayout("fillx, insets 8 8 8 8, gapy 3", "[90][grow][76]", ""));
         setBorder(DarkTheme.createSectionBorder("Laser Parameters"));
         setBackground(DarkTheme.BG_DARK);
 
@@ -65,40 +65,40 @@ public class LaserParametersPanel extends JPanel {
         add(createSubHeader("Fill Pass"), "span 3, growx, wrap 4");
 
         // Spot Radius
-        add(DarkTheme.createLabel("Spot Radius:"), "");
+        add(DarkTheme.createLabel("Spot Radius:"), "aligny center");
         sldRadius = createSlider(-RADIUS_SCALE, RADIUS_SCALE, (int)(0.20 * RADIUS_SCALE));
         sldRadius.setToolTipText(
                 "<html><b>Laser spot radius compensation</b> (−1.0 … +1.0 mm, 0.005 mm steps)<br>" +
                 "<b>Positive:</b> erosion – keeps distance from boundary<br>" +
                 "<b>Zero:</b> no compensation (snaps automatically)<br>" +
                 "<b>Negative:</b> dilation – expands fine features</html>");
-        lblRadiusVal = DarkTheme.createLabel(radiusLabel(0.20));
-        add(sldRadius, "growx");
-        add(lblRadiusVal, "wrap");
+        lblRadiusVal = createValueLabel(radiusLabel(0.20));
+        add(sldRadius, "growx, aligny center");
+        add(lblRadiusVal, "wrap, aligny center");
 
         // Stepover
-        add(DarkTheme.createLabel("Stepover:"), "");
+        add(DarkTheme.createLabel("Stepover:"), "aligny center");
         sldStepover = createSlider(1, 100, 2);
         sldStepover.setToolTipText("Line spacing between passes (0.01 – 1.0 mm)");
-        lblStepoverVal = DarkTheme.createLabel("0.10 mm");
-        add(sldStepover, "growx");
-        add(lblStepoverVal, "wrap");
+        lblStepoverVal = createValueLabel("0.10 mm");
+        add(sldStepover, "growx, aligny center");
+        add(lblStepoverVal, "wrap, aligny center");
 
         // Fill Feed Rate
-        add(DarkTheme.createLabel("Feed Rate:"), "");
+        add(DarkTheme.createLabel("Feed Rate:"), "aligny center");
         sldFeed = createSlider(1, 100, 30);
         sldFeed.setToolTipText("Fill pass movement speed (100 – 10000 mm/min)");
-        lblFeedVal = DarkTheme.createLabel("3000 mm/min");
-        add(sldFeed, "growx");
-        add(lblFeedVal, "wrap");
+        lblFeedVal = createValueLabel("3000 mm/min");
+        add(sldFeed, "growx, aligny center");
+        add(lblFeedVal, "wrap, aligny center");
 
         // Fill Power
-        add(DarkTheme.createLabel("Power:"), "");
+        add(DarkTheme.createLabel("Power:"), "aligny center");
         sldPower = createSlider(0, 100, 75);
         sldPower.setToolTipText("Fill pass laser power level (0 – 100 %)");
-        lblPowerVal = DarkTheme.createLabel("75 %");
-        add(sldPower, "growx");
-        add(lblPowerVal, "wrap 10");
+        lblPowerVal = createValueLabel("75 %");
+        add(sldPower, "growx, aligny center");
+        add(lblPowerVal, "wrap 10, aligny center");
 
         // ═══════════════ CONTOUR PASS ═══════════════
         add(createSubHeader("Contour Pass"), "span 3, growx, wrap 4");
@@ -114,20 +114,20 @@ public class LaserParametersPanel extends JPanel {
         add(chkContour, "span 3, wrap 4");
 
         // Contour Feed Rate
-        add(DarkTheme.createLabel("Feed Rate:"), "");
+        add(DarkTheme.createLabel("Feed Rate:"), "aligny center");
         sldContourFeed = createSlider(1, 100, 30);
         sldContourFeed.setToolTipText("Contour pass movement speed (100 – 10000 mm/min)");
-        lblContourFeedVal = DarkTheme.createLabel("3000 mm/min");
-        add(sldContourFeed, "growx");
-        add(lblContourFeedVal, "wrap");
+        lblContourFeedVal = createValueLabel("3000 mm/min");
+        add(sldContourFeed, "growx, aligny center");
+        add(lblContourFeedVal, "wrap, aligny center");
 
         // Contour Power
-        add(DarkTheme.createLabel("Power:"), "");
+        add(DarkTheme.createLabel("Power:"), "aligny center");
         sldContourPower = createSlider(0, 100, 75);
         sldContourPower.setToolTipText("Contour pass laser power level (0 – 100 %)");
-        lblContourPowerVal = DarkTheme.createLabel("75 %");
-        add(sldContourPower, "growx");
-        add(lblContourPowerVal, "wrap 10");
+        lblContourPowerVal = createValueLabel("75 %");
+        add(sldContourPower, "growx, aligny center");
+        add(lblContourPowerVal, "wrap 10, aligny center");
 
         // ═══════════════ POSITION ═══════════════
         add(createSubHeader("Position"), "span 3, growx, wrap 4");
@@ -137,7 +137,7 @@ public class LaserParametersPanel extends JPanel {
         spnOffsetY = createOffsetSpinner(0.0);
         spnOffsetY.setToolTipText("Y offset of the lower-left corner in mm");
 
-        JPanel offsetRow = new JPanel(new MigLayout("insets 0, fillx", "[30][grow][10][30][grow]", ""));
+        JPanel offsetRow = new JPanel(new MigLayout("insets 0, fillx, gapx 4", "[24][grow][28][grow]", ""));
         offsetRow.setBackground(DarkTheme.BG_DARK);
         offsetRow.add(DarkTheme.createDimLabel("X:"));
         offsetRow.add(spnOffsetX, "growx");
@@ -147,7 +147,7 @@ public class LaserParametersPanel extends JPanel {
 
         JButton btnApplyOffset = DarkTheme.createButton("Apply Offset to All Layers",
                 "Copy X/Y offset to all other layers");
-        add(btnApplyOffset, "span 3, growx, wrap");
+        add(btnApplyOffset, "span 3, growx, h 22!, wrap");
 
         // ─── Snap-to-zero on mouse release ───────────────────────────────────
         sldRadius.addMouseListener(new MouseAdapter() {
@@ -212,6 +212,11 @@ public class LaserParametersPanel extends JPanel {
             settings.setGenerateContour(chkContour.isSelected());
             notifyChange();
         });
+
+        // Keep the preferred width inside the scroll viewport so the right edge
+        // (value labels, buttons) is never clipped, even in a narrow tool panel.
+        Dimension pref = getPreferredSize();
+        setPreferredSize(new Dimension(280, pref.height));
     }
 
     /** Small accent-coloured sub-header with a trailing separator line. */
@@ -228,11 +233,20 @@ public class LaserParametersPanel extends JPanel {
         return p;
     }
 
-    /** Formats the radius value with sign and semantic suffix. */
+    /** Formats the radius value with sign. The sign (＋/−) already conveys the action. */
     private static String radiusLabel(double mm) {
-        if (mm == 0.0) return " 0.000 mm (off)";
-        if (mm < 0)    return String.format("%.3f mm  (expand)", mm);
+        if (mm == 0.0) return " 0.000 mm";
+        if (mm < 0)    return String.format("%.3f mm", mm);
         return             String.format("+%.3f mm", mm);
+    }
+
+    /** Right-aligned, small value label that never clips its column. */
+    private static JLabel createValueLabel(String text) {
+        JLabel lbl = new JLabel(text);
+        lbl.setFont(DarkTheme.FONT_SMALL);
+        lbl.setForeground(DarkTheme.TEXT_PRIMARY);
+        lbl.setHorizontalAlignment(SwingConstants.RIGHT);
+        return lbl;
     }
 
     public void setSettings(LaserSettings s) {
@@ -281,6 +295,9 @@ public class LaserParametersPanel extends JPanel {
         s.setPaintTicks(false);
         s.setPaintLabels(false);
         s.setBorder(BorderFactory.createEmptyBorder());
+        // Keep the panel's preferred width inside the scroll viewport; the [grow]
+        // column stretches the slider to fill the actual available width anyway.
+        s.setPreferredSize(new Dimension(80, s.getPreferredSize().height));
         return s;
     }
 

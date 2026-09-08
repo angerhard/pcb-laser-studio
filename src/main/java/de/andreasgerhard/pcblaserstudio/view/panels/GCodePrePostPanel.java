@@ -36,7 +36,7 @@ public class GCodePrePostPanel extends JPanel {
         add(new JScrollPane(txtSuffix), "growx, h 60:60:60, wrap 6");
 
         JButton btnApplyAll = DarkTheme.createButton("Apply to All Layers", "Copy prefix/suffix to all other layers");
-        add(btnApplyAll, "growx, wrap");
+        add(btnApplyAll, "growx, h 22!, wrap");
         btnApplyAll.addActionListener(e -> { syncToLayer(); if (onApplyToAll != null) onApplyToAll.accept(null); });
 
         // Listeners for text changes
@@ -76,6 +76,7 @@ public class GCodePrePostPanel extends JPanel {
         if (onChange != null) onChange.accept(layer);
     }
 
+    public void setOnChange(Consumer<Layer> cb) { this.onChange = cb; }
     public void setOnApplyToAll(Consumer<Void> cb) { this.onApplyToAll = cb; }
 
     private static JTextArea createTextArea(String defaultText) {

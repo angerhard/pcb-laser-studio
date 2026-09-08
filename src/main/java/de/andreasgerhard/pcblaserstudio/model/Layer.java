@@ -38,10 +38,16 @@ public class Layer {
     }
 
     public LayerType getType() { return type; }
-    public void setType(LayerType type) { this.type = type; }
+    public void setType(LayerType type) {
+        this.type = type;
+        this.dirty = true;
+    }
 
     public LayerSide getSide() { return side; }
-    public void setSide(LayerSide side) { this.side = side; }
+    public void setSide(LayerSide side) {
+        this.side = side;
+        this.dirty = true;
+    }
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) {
@@ -56,7 +62,10 @@ public class Layer {
     }
 
     public String getSvgFilePath() { return svgFilePath; }
-    public void setSvgFilePath(String svgFilePath) { this.svgFilePath = svgFilePath; }
+    public void setSvgFilePath(String svgFilePath) {
+        this.svgFilePath = svgFilePath;
+        this.dirty = true;
+    }
 
     public ProcessingMode getProcessingMode() { return processingMode; }
     public void setProcessingMode(ProcessingMode processingMode) {
@@ -77,7 +86,10 @@ public class Layer {
     }
 
     public LaserSettings getLaserSettings() { return laserSettings; }
-    public void setLaserSettings(LaserSettings laserSettings) { this.laserSettings = laserSettings; }
+    public void setLaserSettings(LaserSettings laserSettings) {
+        this.laserSettings = laserSettings;
+        this.dirty = true;
+    }
 
     public boolean isDirty() { return dirty; }
     public void setDirty(boolean dirty) { this.dirty = dirty; }

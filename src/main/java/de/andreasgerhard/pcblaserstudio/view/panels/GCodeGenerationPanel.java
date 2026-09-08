@@ -28,16 +28,19 @@ public class GCodeGenerationPanel extends JPanel {
     private final JButton btnExportGcode;
     private final JButton btnExportProject;
 
+    private GenerateCallback callback;
+
     public GCodeGenerationPanel() {
-        setLayout(new MigLayout("fillx, insets 8 8 8 8, gapy 5", "[grow][grow]", ""));
+        // Single growing column; each logical row uses "split" so it stays compact.
+        setLayout(new MigLayout("fillx, insets 6 8 6 8, gapy 4, gapx 4", "[grow]", ""));
         setBorder(DarkTheme.createSectionBorder("GCODE Generation"));
         setBackground(DarkTheme.BG_DARK);
 
         // Generate buttons
         btnGenerateActive = DarkTheme.createAccentButton("Generate Active", "Generate GCODE for the current layer");
         btnGenerateAll    = DarkTheme.createButton("Generate All", "Generate GCODE for all enabled layers");
-        add(btnGenerateActive, "growx");
-        add(btnGenerateAll, "growx, wrap 8");
+        add(btnGenerateActive, "split 2, w 46%, h 22!, wmax 190");
+        add(btnGenerateAll, "w 46%, h 22!, wmax 190, wrap");
 
         // Progress
         progressBar = new JProgressBar(0, 100);
@@ -45,10 +48,10 @@ public class GCodeGenerationPanel extends JPanel {
         progressBar.setString("Ready");
         progressBar.setValue(0);
         progressBar.setFont(DarkTheme.FONT_SMALL);
-        add(progressBar, "span 2, growx, wrap 6");
+        add(progressBar, "growx, h 16!, wrap");
 
         // Stats panel
-        JPanel statsPanel = new JPanel(new MigLayout("fillx, insets 6 6 6 6, gapy 2", "[][grow]", ""));
+        JPanel statsPanel = new JPanel(new MigLayout("fillx, insets 3 8 3 8, gapy 1, gapx 8", "[grow][grow]", ""));
         statsPanel.setBackground(DarkTheme.BG_DARKEST);
         statsPanel.setBorder(BorderFactory.createLineBorder(DarkTheme.BG_MEDIUM, 1));
 
@@ -64,43 +67,34 @@ public class GCodeGenerationPanel extends JPanel {
         lblFileSize = DarkTheme.createLabel("-");
         statsPanel.add(lblFileSize, "wrap");
 
-        add(statsPanel, "span 2, growx, wrap 8");
+        add(statsPanel, "growx, wrap");
 
         // Preview/Show layer visibility controls
-        JLabel lblVisTitle = DarkTheme.createDimLabel("Overlay Visibility:");
-        add(lblVisTitle, "span 2, wrap 2");
+        JCheckBox chkShowSvg      = createCheck("SVG",      true, "Show/hide the SVG background");
+        JCheckBox chkShowOutlines = createCheck("Outlines", true, "Show/hide red outline paths");
+        JCheckBox chkShowFill     = createCheck("Fill",     true, "Show/hide blue fill paths");
 
-        JCheckBox chkShowSvg      = createCheck("Show SVG",      true, "Show/hide the SVG background");
-        JCheckBox chkShowOutlines = createCheck("Show Outlines",  true, "Show/hide red outline paths");
-        JCheckBox chkShowFill     = createCheck("Show Fill",      true, "Show/hide blue fill paths");
-
-        add(chkShowSvg,      "");
-        add(chkShowOutlines, "wrap");
-        add(new JLabel(""), "");
-        add(chkShowFill, "wrap 8");
+        add(DarkTheme.createDimLabel("Show:"), "split 4, gapright 6");
+        add(chkShowSvg, "");
+        add(chkShowOutlines, "");
+        add(chkShowFill, "wrap");
 
         // Zoom controls
-        JLabel lblZoom = DarkTheme.createDimLabel("Zoom:");
-        add(lblZoom, "span 2, wrap 2");
-
         JButton btnFit  = DarkTheme.createButton("Fit",    "Fit SVG to window");
         JButton btnZIn  = DarkTheme.createButton("+",      "Zoom in");
         JButton btnZOut = DarkTheme.createButton("-",      "Zoom out");
         JButton btn100  = DarkTheme.createButton("100%",   "Actual size");
 
-        add(btnFit, "growx");
-        JPanel zoomRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        zoomRow.setBackground(DarkTheme.BG_DARK);
-        zoomRow.add(btnZOut);
-        zoomRow.add(btn100);
-        zoomRow.add(btnZIn);
-        add(zoomRow, "wrap 8");
+        add(btnFit, "split 4, growx, h 22!, wmax 140");
+        add(btnZOut, "w 28!, h 22!");
+        add(btn100, "w 50!, h 22!");
+        add(btnZIn, "w 28!, h 22!, wrap");
 
         // Export buttons
         btnExportGcode   = DarkTheme.createButton("Export GCODE",   "Save GCODE to file");
         btnExportProject = DarkTheme.createButton("Export Project",  "Save project as .pcblaser");
-        add(btnExportGcode,   "growx");
-        add(btnExportProject, "growx, wrap");
+        add(btnExportGcode, "split 2, w 46%, h 22!, wmax 190");
+        add(btnExportProject, "w 46%, h 22!, wmax 190, wrap");
 
         // Expose zoom buttons via action commands (controller wires them via name lookup)
         btnFit.setActionCommand("zoom.fit");
@@ -119,16 +113,17 @@ public class GCodeGenerationPanel extends JPanel {
         chkShowSvg.setName("vis.svg");
         chkShowOutlines.setName("vis.outlines");
         chkShowFill.setName("vis.fill");
+
+        // Wire generate/export buttons once; they delegate to the current callback.
+        btnGenerateActive.addActionListener(e -> { if (callback != null) callback.onGenerateActive(); });
+        btnGenerateAll.addActionListener(e -> { if (callback != null) callback.onGenerateAll(); });
+        btnExportGcode.addActionListener(e -> { if (callback != null) callback.onExportGcode(); });
+        btnExportProject.addActionListener(e -> { if (callback != null) callback.onExportProject(); });
     }
 
     // =================== Wiring from controller ===================
 
-    public void setCallback(GenerateCallback cb) {
-        btnGenerateActive.addActionListener(e -> cb.onGenerateActive());
-        btnGenerateAll.addActionListener(e -> cb.onGenerateAll());
-        btnExportGcode.addActionListener(e -> cb.onExportGcode());
-        btnExportProject.addActionListener(e -> cb.onExportProject());
-    }
+    public void setCallback(GenerateCallback cb) { this.callback = cb; }
 
     public void setProgress(int value, String text) {
         SwingUtilities.invokeLater(() -> {

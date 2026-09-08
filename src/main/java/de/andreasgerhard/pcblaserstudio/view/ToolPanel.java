@@ -24,9 +24,11 @@ public class ToolPanel extends JPanel {
     public final HistogramPanel histogramPanel;
 
     public ToolPanel() {
-        setLayout(new BorderLayout());
+        // Tabs row grows; bottom row takes its (compact) preferred height.
+        setLayout(new MigLayout("fill, insets 0, gapy 0", "[grow]", "[grow][pref]"));
         setBackground(DarkTheme.BG_DARK);
         setPreferredSize(new Dimension(300, 600));
+        setMinimumSize(new Dimension(260, 0));
 
         // --- Settings tabs (Layer / Laser / Script) ---
         layerSettingsPanel   = new LayerSettingsPanel();
@@ -47,22 +49,22 @@ public class ToolPanel extends JPanel {
         // --- Bottom: generation controls + histogram (always visible) ---
         gcodeGenerationPanel = new GCodeGenerationPanel();
         histogramPanel       = new HistogramPanel();
-        histogramPanel.setPreferredSize(new Dimension(260, 120));
+        histogramPanel.setPreferredSize(new Dimension(260, 100));
 
         JPanel bottomPanel = new JPanel(new MigLayout("fillx, insets 0, gapy 0", "[grow]", ""));
         bottomPanel.setBackground(DarkTheme.BG_DARK);
         bottomPanel.add(gcodeGenerationPanel, "growx, wrap");
-        bottomPanel.add(histogramPanel,       "growx, h 120:120:120, wrap");
+        bottomPanel.add(histogramPanel,       "growx, h 100:100:100, wrap");
 
-        add(settingsTabs, BorderLayout.CENTER);
-        add(bottomPanel,  BorderLayout.SOUTH);
+        add(settingsTabs, "grow, wrap");
+        add(bottomPanel,  "growx");
     }
 
     /** Wraps a panel in a scroll pane without a visible border. */
     private static JScrollPane wrapScroll(JPanel panel) {
         JScrollPane sp = new JScrollPane(panel,
                 JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-                JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         sp.getVerticalScrollBar().setUnitIncrement(12);
         sp.setBorder(BorderFactory.createEmptyBorder());
         sp.setBackground(DarkTheme.BG_DARK);
