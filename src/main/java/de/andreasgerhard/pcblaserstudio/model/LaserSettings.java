@@ -1,7 +1,10 @@
 package de.andreasgerhard.pcblaserstudio.model;
 
 public class LaserSettings {
-    private double radiusMm = 0.2;
+    /** Laser spot radius on the X axis in mm (half of the spot width). */
+    private double radiusXMm = 0.025;
+    /** Laser spot radius on the Y axis in mm (half of the spot height). */
+    private double radiusYMm = 0.04;
     private double stepoverMm = 0.1;
     private double feedRateMmPerMin = 3000;
     private double powerPercent = 75;
@@ -20,7 +23,8 @@ public class LaserSettings {
     public LaserSettings() {}
 
     public LaserSettings(LaserSettings other) {
-        this.radiusMm = other.radiusMm;
+        this.radiusXMm = other.radiusXMm;
+        this.radiusYMm = other.radiusYMm;
         this.stepoverMm = other.stepoverMm;
         this.feedRateMmPerMin = other.feedRateMmPerMin;
         this.powerPercent = other.powerPercent;
@@ -32,8 +36,11 @@ public class LaserSettings {
         this.contourPowerPercent = other.contourPowerPercent;
     }
 
-    public double getRadiusMm() { return radiusMm; }
-    public void setRadiusMm(double radiusMm) { this.radiusMm = radiusMm; }
+    public double getRadiusXMm() { return radiusXMm; }
+    public void setRadiusXMm(double radiusXMm) { this.radiusXMm = radiusXMm; }
+
+    public double getRadiusYMm() { return radiusYMm; }
+    public void setRadiusYMm(double radiusYMm) { this.radiusYMm = radiusYMm; }
 
     public double getStepoverMm() { return stepoverMm; }
     public void setStepoverMm(double stepoverMm) { this.stepoverMm = stepoverMm; }

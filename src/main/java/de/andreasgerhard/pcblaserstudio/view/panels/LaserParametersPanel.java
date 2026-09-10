@@ -6,8 +6,6 @@ import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.util.function.Consumer;
 
 /**
@@ -20,11 +18,13 @@ public class LaserParametersPanel extends JPanel {
     private Consumer<LaserSettings> onChange;
     private Consumer<LaserSettings> onApplyOffsetToAll;
 
-    // Radius: −1.0 – +1.0 mm  |  200 ticks, 0.005 mm/tick
-    private static final int RADIUS_SCALE     = 200;
-    private static final int RADIUS_SNAP_ZONE = 0;
-    private final JSlider sldRadius;
-    private final JLabel  lblRadiusVal;
+    // Radius X/Y: 0 – 0.1 mm  |  100 ticks, 0.001 mm/tick
+    private static final double RADIUS_TICK_MM = 0.001;
+    private static final int    RADIUS_TICKS   = 100;
+    private final JSlider sldRadiusX;
+    private final JLabel  lblRadiusXVal;
+    private final JSlider sldRadiusY;
+    private final JLabel  lblRadiusYVal;
 
     // Stepover: 0.01 – 1.0 mm (steps of 0.01 → 100 ticks)
     private final JSlider sldStepover;
@@ -57,24 +57,34 @@ public class LaserParametersPanel extends JPanel {
 
     public LaserParametersPanel() {
         // Column: label | slider (grows) | value (right-aligned)
-        setLayout(new MigLayout("fillx, insets 8 8 8 8, gapy 3", "[90][grow][76]", ""));
+        setLayout(new MigLayout("fillx, insets 8 8 8 8, gapy 3", "[98][grow][76]", ""));
         setBorder(DarkTheme.createSectionBorder("Laser Parameters"));
         setBackground(DarkTheme.BG_DARK);
 
         // ═══════════════ FILL PASS ═══════════════
         add(createSubHeader("Fill Pass"), "span 3, growx, wrap 4");
 
-        // Spot Radius
-        add(DarkTheme.createLabel("Spot Radius:"), "aligny center");
-        sldRadius = createSlider(-RADIUS_SCALE, RADIUS_SCALE, (int)(0.20 * RADIUS_SCALE));
-        sldRadius.setToolTipText(
-                "<html><b>Laser spot radius compensation</b> (−1.0 … +1.0 mm, 0.005 mm steps)<br>" +
-                "<b>Positive:</b> erosion – keeps distance from boundary<br>" +
-                "<b>Zero:</b> no compensation (snaps automatically)<br>" +
-                "<b>Negative:</b> dilation – expands fine features</html>");
-        lblRadiusVal = createValueLabel(radiusLabel(0.20));
-        add(sldRadius, "growx, aligny center");
-        add(lblRadiusVal, "wrap, aligny center");
+        // Spot Radius X
+        add(DarkTheme.createLabel("Spot Radius X:"), "aligny center");
+        sldRadiusX = createSlider(0, RADIUS_TICKS, (int)(0.025 / RADIUS_TICK_MM));
+        sldRadiusX.setToolTipText(
+                "<html><b>Laser spot radius on the X axis</b> (0 … 0.1 mm, 0.001 mm steps)<br>" +
+                "Half of the spot width in X direction (0.05 mm spot → 0.025 mm).<br>" +
+                "Erosion keeps the laser centre this far from shape boundaries.</html>");
+        lblRadiusXVal = createValueLabel(radiusLabel(0.025));
+        add(sldRadiusX, "growx, aligny center");
+        add(lblRadiusXVal, "wrap, aligny center");
+
+        // Spot Radius Y
+        add(DarkTheme.createLabel("Spot Radius Y:"), "aligny center");
+        sldRadiusY = createSlider(0, RADIUS_TICKS, (int)(0.04 / RADIUS_TICK_MM));
+        sldRadiusY.setToolTipText(
+                "<html><b>Laser spot radius on the Y axis</b> (0 … 0.1 mm, 0.001 mm steps)<br>" +
+                "Half of the spot width in Y direction (0.08 mm spot → 0.04 mm).<br>" +
+                "Erosion keeps the laser centre this far from shape boundaries.</html>");
+        lblRadiusYVal = createValueLabel(radiusLabel(0.04));
+        add(sldRadiusY, "growx, aligny center");
+        add(lblRadiusYVal, "wrap, aligny center");
 
         // Stepover
         add(DarkTheme.createLabel("Stepover:"), "aligny center");
@@ -149,19 +159,18 @@ public class LaserParametersPanel extends JPanel {
                 "Copy X/Y offset to all other layers");
         add(btnApplyOffset, "span 3, growx, h 22!, wrap");
 
-        // ─── Snap-to-zero on mouse release ───────────────────────────────────
-        sldRadius.addMouseListener(new MouseAdapter() {
-            @Override public void mouseReleased(MouseEvent e) {
-                if (Math.abs(sldRadius.getValue()) <= RADIUS_SNAP_ZONE) sldRadius.setValue(0);
-            }
-        });
-
         // ─── Change listeners ─────────────────────────────────────────────────
-        sldRadius.addChangeListener(e -> {
+        sldRadiusX.addChangeListener(e -> {
             if (updating) return;
-            double val = sldRadius.getValue() / (double) RADIUS_SCALE;
-            lblRadiusVal.setText(radiusLabel(val));
-            if (settings != null) { settings.setRadiusMm(val); notifyChange(); }
+            double val = sldRadiusX.getValue() * RADIUS_TICK_MM;
+            lblRadiusXVal.setText(radiusLabel(val));
+            if (settings != null) { settings.setRadiusXMm(val); notifyChange(); }
+        });
+        sldRadiusY.addChangeListener(e -> {
+            if (updating) return;
+            double val = sldRadiusY.getValue() * RADIUS_TICK_MM;
+            lblRadiusYVal.setText(radiusLabel(val));
+            if (settings != null) { settings.setRadiusYMm(val); notifyChange(); }
         });
         sldStepover.addChangeListener(e -> {
             if (updating) return;
@@ -233,11 +242,9 @@ public class LaserParametersPanel extends JPanel {
         return p;
     }
 
-    /** Formats the radius value with sign. The sign (＋/−) already conveys the action. */
+    /** Formats the radius value in mm (0 … 0.1 mm range). */
     private static String radiusLabel(double mm) {
-        if (mm == 0.0) return " 0.000 mm";
-        if (mm < 0)    return String.format("%.3f mm", mm);
-        return             String.format("+%.3f mm", mm);
+        return String.format("%.3f mm", mm);
     }
 
     /** Right-aligned, small value label that never clips its column. */
@@ -254,8 +261,11 @@ public class LaserParametersPanel extends JPanel {
         updating = true;
         try {
             if (s != null) {
-                sldRadius.setValue((int) Math.round(s.getRadiusMm() * RADIUS_SCALE));
-                lblRadiusVal.setText(radiusLabel(s.getRadiusMm()));
+                sldRadiusX.setValue((int) Math.round(s.getRadiusXMm() / RADIUS_TICK_MM));
+                lblRadiusXVal.setText(radiusLabel(s.getRadiusXMm()));
+
+                sldRadiusY.setValue((int) Math.round(s.getRadiusYMm() / RADIUS_TICK_MM));
+                lblRadiusYVal.setText(radiusLabel(s.getRadiusYMm()));
 
                 sldStepover.setValue((int) Math.round(s.getStepoverMm() * 100));
                 lblStepoverVal.setText(String.format("%.2f mm", s.getStepoverMm()));

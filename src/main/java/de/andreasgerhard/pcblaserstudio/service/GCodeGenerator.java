@@ -96,8 +96,8 @@ public class GCodeGenerator {
         double contentHeightMm = batikH * MM_PER_BATIK_PX;
         double pxPerMm         = actualW / contentWidthMm;
 
-        // laserRadiusPx may be negative (user-requested expansion to protect fine elements)
-        int laserRadiusPx  = (int) Math.round(ls.getRadiusMm() * pxPerMm);
+        int radiusXPx = (int) Math.round(ls.getRadiusXMm() * pxPerMm);
+        int radiusYPx = (int) Math.round(ls.getRadiusYMm() * pxPerMm);
         int stepoverPx     = Math.max(1, (int) Math.round(ls.getStepoverMm()  * pxPerMm));
         int power          = (int) Math.round(ls.getPowerPercent() * 10.0); // S0–S1000
         int feedRate       = (int) ls.getFeedRateMmPerMin();
@@ -106,11 +106,11 @@ public class GCodeGenerator {
 
         // ── 3. Analyse image pixels ──────────────────────────────────────────
         boolean[][] engrave = analyzeImage(img, engraveBlack);
-        // Apply morphological compensation based on radius:
-        //   positive radius → erosion: laser centre stays ≥radius away from non-engraved boundary
-        //   negative radius → dilation: laser expands into boundary to protect fine elements
-        if (laserRadiusPx != 0) {
-            engrave = applyMorphology(engrave, laserRadiusPx);
+        // Apply morphological compensation based on the anisotropic spot radius
+        // (rectangle of radiusXPx × radiusYPx). The laser spot is not round, so
+        // X and Y are eroded independently.
+        if (radiusXPx != 0 || radiusYPx != 0) {
+            engrave = applyMorphology(engrave, radiusXPx, radiusYPx);
         }
         if (progressCallback != null) progressCallback.accept(25);
 
@@ -137,7 +137,8 @@ public class GCodeGenerator {
         sb.append(String.format(Locale.ENGLISH,
                 "; Content size: %.3f x %.3f mm\n", contentWidthMm, contentHeightMm));
         sb.append(String.format(Locale.ENGLISH,
-                "; Radius: %.3f mm, Stepover: %.3f mm\n", ls.getRadiusMm(), ls.getStepoverMm()));
+                "; Radius: X=%.3f mm, Y=%.3f mm, Stepover: %.3f mm\n",
+                ls.getRadiusXMm(), ls.getRadiusYMm(), ls.getStepoverMm()));
         sb.append(String.format(Locale.ENGLISH,
                 "; Feed: %d mm/min, Power: %.0f%%\n", feedRate, ls.getPowerPercent()));
         sb.append(String.format(Locale.ENGLISH,
@@ -152,7 +153,9 @@ public class GCodeGenerator {
 
         // Contour pass (outline inset by radius)
         if (!outlineSegs.isEmpty()) {
-            sb.append("; ===== CONTOUR PASS (inset ").append(ls.getRadiusMm()).append(" mm) =====\n");
+            sb.append(String.format(Locale.ENGLISH,
+                    "; ===== CONTOUR PASS (inset X=%.3f mm / Y=%.3f mm) =====\n",
+                    ls.getRadiusXMm(), ls.getRadiusYMm()));
             appendSegments(sb, outlineSegs, contourFeedRate, contourPower,
                     contentWidthMm, contentHeightMm, actualW, actualH, true,
                     ls.getOffsetXMm(), ls.getOffsetYMm());
@@ -209,52 +212,49 @@ public class GCodeGenerator {
     }
 
     /**
-     * Applies morphological erosion (radiusPx > 0) or dilation (radiusPx < 0)
-     * to the boolean engraving mask using an efficient separable box-filter.
+     * Applies morphological erosion to the boolean engraving mask using an
+     * anisotropic (rectangular) structuring element with half-extents
+     * {@code radiusXPx} in X and {@code radiusYPx} in Y, via an efficient
+     * separable box-filter.
      *
-     * <ul>
-     *   <li><b>Erosion (positive radius):</b> a pixel is engraved only if <em>all</em>
-     *       pixels within the box window are also engraved. This keeps the laser centre
-     *       at least {@code radius} px away from non-engraved boundaries, preventing
-     *       the laser spot from overrunning fine structures.</li>
-     *   <li><b>Dilation (negative radius):</b> a pixel is marked as engraved if
-     *       <em>any</em> pixel within {@code |radius|} px is engraved. This expands
-     *       fine elements outward so they survive even when smaller than the laser
-     *       spot diameter.</li>
-     * </ul>
+     * <p>Because the laser spot is not round (e.g. 0.05 × 0.08 mm), the erosion
+     * distance differs per axis. A pixel is engraved only if <em>all</em> pixels
+     * within the {@code radiusXPx × radiusYPx} box window are also engraved.
+     * This keeps the laser centre at least its spot radius away from
+     * non-engraved boundaries, preventing the laser spot from overrunning fine
+     * structures.</p>
      *
-     * Two-pass separable morphology (horizontal then vertical) using prefix sums
-     * gives O(h × w) complexity regardless of radius size.
+     * <p>Two-pass separable morphology (horizontal then vertical) using prefix sums
+     * gives O(h × w) complexity regardless of radius size.</p>
+     *
+     * @param radiusXPx  horizontal half-extent of the structuring element in px
+     * @param radiusYPx  vertical half-extent of the structuring element in px
      */
-    private static boolean[][] applyMorphology(boolean[][] src, int radiusPx) {
-        if (radiusPx == 0) return src;
+    private static boolean[][] applyMorphology(boolean[][] src, int radiusXPx, int radiusYPx) {
+        if (radiusXPx == 0 && radiusYPx == 0) return src;
         int h = src.length, w = src[0].length;
-        boolean dilate = radiusPx < 0;
-        int r = Math.abs(radiusPx);
 
-        // ── Horizontal pass ─────────────────────────────────────────────────
+        // ── Horizontal pass (X radius) ─────────────────────────────────────
         boolean[][] temp = new boolean[h][w];
         for (int y = 0; y < h; y++) {
             int[] prefix = new int[w + 1];
             for (int x = 0; x < w; x++) prefix[x + 1] = prefix[x] + (src[y][x] ? 1 : 0);
             for (int x = 0; x < w; x++) {
-                int lo = Math.max(0, x - r);
-                int hi = Math.min(w, x + r + 1);
-                int count = prefix[hi] - prefix[lo];
-                temp[y][x] = dilate ? (count > 0) : (count == hi - lo);
+                int lo = Math.max(0, x - radiusXPx);
+                int hi = Math.min(w, x + radiusXPx + 1);
+                temp[y][x] = prefix[hi] - prefix[lo] == hi - lo;
             }
         }
 
-        // ── Vertical pass ────────────────────────────────────────────────────
+        // ── Vertical pass (Y radius) ────────────────────────────────────────
         boolean[][] result = new boolean[h][w];
         for (int x = 0; x < w; x++) {
             int[] prefix = new int[h + 1];
             for (int y = 0; y < h; y++) prefix[y + 1] = prefix[y] + (temp[y][x] ? 1 : 0);
             for (int y = 0; y < h; y++) {
-                int lo = Math.max(0, y - r);
-                int hi = Math.min(h, y + r + 1);
-                int count = prefix[hi] - prefix[lo];
-                result[y][x] = dilate ? (count > 0) : (count == hi - lo);
+                int lo = Math.max(0, y - radiusYPx);
+                int hi = Math.min(h, y + radiusYPx + 1);
+                result[y][x] = prefix[hi] - prefix[lo] == hi - lo;
             }
         }
         return result;

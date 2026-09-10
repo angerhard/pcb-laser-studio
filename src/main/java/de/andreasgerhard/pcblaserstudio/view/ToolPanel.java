@@ -43,7 +43,7 @@ public class ToolPanel extends JPanel {
         settingsTabs.addTab("Laser",  wrapScroll(laserParametersPanel));
         settingsTabs.addTab("Script", wrapScroll(gcodePrePostPanel));
         settingsTabs.setToolTipTextAt(0, "Layer metadata (name, type, side, mode)");
-        settingsTabs.setToolTipTextAt(1, "Laser engraving parameters (radius, stepover, feed, power, offset)");
+        settingsTabs.setToolTipTextAt(1, "Laser engraving parameters (spot radius X/Y, stepover, feed, power, offset)");
         settingsTabs.setToolTipTextAt(2, "GCODE prefix / suffix scripts");
 
         // --- Bottom: generation controls + histogram (always visible) ---
