@@ -1,12 +1,15 @@
 package de.andreasgerhard.pcblaserstudio.controller;
 
+import de.andreasgerhard.pcblaserstudio.model.ConnectionSettings;
 import de.andreasgerhard.pcblaserstudio.model.Layer;
 import de.andreasgerhard.pcblaserstudio.model.Project;
 import de.andreasgerhard.pcblaserstudio.service.GCodeGenerator;
+import de.andreasgerhard.pcblaserstudio.service.PreferencesService;
 import de.andreasgerhard.pcblaserstudio.service.ProjectSerializer;
 import de.andreasgerhard.pcblaserstudio.service.SvgParser;
 import de.andreasgerhard.pcblaserstudio.view.LayerTab;
 import de.andreasgerhard.pcblaserstudio.view.MainWindow;
+import de.andreasgerhard.pcblaserstudio.view.dialogs.LaserControlDialog;
 import de.andreasgerhard.pcblaserstudio.view.panels.GCodeGenerationPanel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,11 +33,16 @@ public class MainController {
     private Project project;
     private MainWindow window;
 
+    private final PreferencesService preferencesService = new PreferencesService();
+    private ConnectionSettings connectionSettings;
+    private LaserControlDialog laserDialog;
+
     // Per-tab parse results cache
     private final Map<String, SvgParser.SvgParseResult> parseCache   = new HashMap<>();
     private final Map<String, GCodeGenerator.GCodeResult> gcodeCache = new HashMap<>();
 
     public void initialize() {
+        connectionSettings = preferencesService.load();
         project = new Project();
         project.clearDirty(); // default layer setup shouldn't count as unsaved changes
         window  = new MainWindow();
@@ -67,6 +75,7 @@ public class MainController {
         window.menuGenAll.addActionListener(e -> onGenerateAll());
         window.menuExportGcode.addActionListener(e -> onExportGcode());
         window.menuExportProject.addActionListener(e -> onSaveProject(true));
+        window.menuSendToLaser.addActionListener(e -> onSendToLaser());
         window.menuAbout.addActionListener(e -> onAbout());
     }
 
@@ -147,6 +156,7 @@ public class MainController {
             @Override public void onGenerateAll()     { MainController.this.onGenerateAll(); }
             @Override public void onExportGcode()     { MainController.this.onExportGcode(); }
             @Override public void onExportProject()   { onSaveProject(true); }
+            @Override public void onSendToLaser()     { MainController.this.onSendToLaser(); }
         });
 
         // Zoom controls: find named buttons inside the panel
@@ -349,6 +359,28 @@ public class MainController {
                         "Export Error", JOptionPane.ERROR_MESSAGE);
             }
         }
+    }
+
+    // =================== Send to laser ===================
+
+    private void onSendToLaser() {
+        LayerTab tab = window.getActiveTab();
+        if (tab == null) return;
+        GCodeGenerator.GCodeResult result = gcodeCache.get(tab.getLayer().getId());
+        if (result == null) {
+            JOptionPane.showMessageDialog(window, "Generate GCODE first.", "No GCODE",
+                    JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (connectionSettings == null) connectionSettings = preferencesService.load();
+
+        if (laserDialog == null || !laserDialog.isDisplayable()) {
+            laserDialog = new LaserControlDialog(window, connectionSettings, preferencesService);
+        }
+        laserDialog.setJob(tab.getLayer().getName(), result.gcode(), result.estimatedTimeSeconds());
+        laserDialog.setVisible(true);
+        laserDialog.toFront();
+        window.setStatus("Send to laser: " + tab.getLayer().getName());
     }
 
     // =================== Project save/load ===================

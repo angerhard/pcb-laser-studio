@@ -27,6 +27,7 @@ public class MainWindow extends JFrame {
     public JMenuItem menuNew, menuOpen, menuSave, menuSaveAs, menuExit;
     public JMenuItem menuOpenSvg, menuClearSvg;
     public JMenuItem menuGenAll, menuGenActive, menuExportGcode, menuExportProject;
+    public JMenuItem menuSendToLaser;
     public JMenuItem menuAbout;
 
     private Consumer<Integer> onTabChanged;
@@ -169,12 +170,15 @@ public class MainWindow extends JFrame {
         menuGenAll        = darkItem("Generate All Layers",    "Ctrl+F5");
         menuExportGcode   = darkItem("Export GCODE…",          "Ctrl+E");
         menuExportProject = darkItem("Export Project…",        null);
+        menuSendToLaser   = darkItem("Send to Laser…",         "Ctrl+L");
 
         mGen.add(menuGenActive);
         mGen.add(menuGenAll);
         mGen.addSeparator();
         mGen.add(menuExportGcode);
         mGen.add(menuExportProject);
+        mGen.addSeparator();
+        mGen.add(menuSendToLaser);
 
         // Help
         JMenu mHelp = darkMenu("Help");

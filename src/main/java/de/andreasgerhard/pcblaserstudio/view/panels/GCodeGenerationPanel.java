@@ -17,6 +17,7 @@ public class GCodeGenerationPanel extends JPanel {
         void onGenerateAll();
         void onExportGcode();
         void onExportProject();
+        void onSendToLaser();
     }
 
     private final JProgressBar progressBar;
@@ -27,6 +28,7 @@ public class GCodeGenerationPanel extends JPanel {
     private final JButton btnGenerateAll;
     private final JButton btnExportGcode;
     private final JButton btnExportProject;
+    private final JButton btnSendToLaser;
 
     private GenerateCallback callback;
 
@@ -96,6 +98,12 @@ public class GCodeGenerationPanel extends JPanel {
         add(btnExportGcode, "split 2, w 46%, h 22!, wmax 190");
         add(btnExportProject, "w 46%, h 22!, wmax 190, wrap");
 
+        // Send to laser cutter
+        btnSendToLaser = DarkTheme.createAccentButton("Send to Laser…",
+                "Connect to a laser cutter and stream this layer's GCODE");
+        btnSendToLaser.setEnabled(false);
+        add(btnSendToLaser, "growx, h 24!, wrap");
+
         // Expose zoom buttons via action commands (controller wires them via name lookup)
         btnFit.setActionCommand("zoom.fit");
         btnZIn.setActionCommand("zoom.in");
@@ -119,6 +127,7 @@ public class GCodeGenerationPanel extends JPanel {
         btnGenerateAll.addActionListener(e -> { if (callback != null) callback.onGenerateAll(); });
         btnExportGcode.addActionListener(e -> { if (callback != null) callback.onExportGcode(); });
         btnExportProject.addActionListener(e -> { if (callback != null) callback.onExportProject(); });
+        btnSendToLaser.addActionListener(e -> { if (callback != null) callback.onSendToLaser(); });
     }
 
     // =================== Wiring from controller ===================
@@ -143,6 +152,7 @@ public class GCodeGenerationPanel extends JPanel {
                 lblEstTime.setText(GCodeGenerator.formatTime(result.estimatedTimeSeconds()));
                 lblFileSize.setText(String.format("%.1f KB", result.fileSizeKb()));
             }
+            btnSendToLaser.setEnabled(result != null);
         });
     }
 
