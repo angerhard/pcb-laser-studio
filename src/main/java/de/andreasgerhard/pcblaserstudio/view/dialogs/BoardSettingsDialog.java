@@ -3,6 +3,7 @@ package de.andreasgerhard.pcblaserstudio.view.dialogs;
 import de.andreasgerhard.pcblaserstudio.model.BoardSettings;
 import de.andreasgerhard.pcblaserstudio.model.FlipAxis;
 import de.andreasgerhard.pcblaserstudio.view.theme.DarkTheme;
+import de.andreasgerhard.pcblaserstudio.view.theme.Icons;
 import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
@@ -22,6 +23,7 @@ public class BoardSettingsDialog extends JDialog {
     private final JSpinner spnHeight;
     private final JSpinner spnMargin;
     private final JComboBox<FlipAxis> cmbFlipAxis;
+    private final JLabel lblFlipIcon;
     private final JCheckBox chkMirrorBack;
     private final JCheckBox chkBorder;
     private final JTextArea warningArea;
@@ -63,11 +65,14 @@ public class BoardSettingsDialog extends JDialog {
         form.add(DarkTheme.createDimLabel("mm"), "wrap");
 
         form.add(DarkTheme.createLabel("Flip axis:"), "");
+        lblFlipIcon = new JLabel(Icons.of(Icons.FLIP_X, 14, DarkTheme.ACCENT));
         cmbFlipAxis = new JComboBox<>(FlipAxis.values());
         cmbFlipAxis.setFont(DarkTheme.FONT_NORMAL);
         cmbFlipAxis.setToolTipText(
                 "<html>Which axis the board is turned over around when flipping to the back side.<br>" +
                 "The board is assumed to flip in place (its bounding box doesn't move).</html>");
+        cmbFlipAxis.addActionListener(e -> updateFlipIcon());
+        form.add(lblFlipIcon, "split 2");
         form.add(cmbFlipAxis, "growx, wrap");
 
         chkMirrorBack = new JCheckBox("Mirror back-side artwork before burning");
@@ -106,6 +111,7 @@ public class BoardSettingsDialog extends JDialog {
         warnPanel.add(warnScroll, BorderLayout.CENTER);
 
         JButton btnRefresh = DarkTheme.createButton("Refresh Check", "Re-check front/back SVG sizes");
+        btnRefresh.setIcon(Icons.of(Icons.REFRESH, 13));
         btnRefresh.addActionListener(e -> refreshWarnings());
         warnPanel.add(btnRefresh, BorderLayout.SOUTH);
 
@@ -149,11 +155,18 @@ public class BoardSettingsDialog extends JDialog {
             cmbFlipAxis.setSelectedItem(settings.getFlipAxis());
             chkMirrorBack.setSelected(settings.isMirrorBackArtwork());
             chkBorder.setSelected(settings.isGenerateBorder());
+            updateFlipIcon();
         } finally {
             updating = false;
             this.settings = settings;
         }
         refreshWarnings();
+    }
+
+    private void updateFlipIcon() {
+        FlipAxis axis = (FlipAxis) cmbFlipAxis.getSelectedItem();
+        String name = axis == FlipAxis.HORIZONTAL ? Icons.FLIP_Y : Icons.FLIP_X;
+        lblFlipIcon.setIcon(Icons.of(name, 14, DarkTheme.ACCENT));
     }
 
     public void setOnChange(Consumer<BoardSettings> cb) { this.onChange = cb; }
@@ -162,9 +175,10 @@ public class BoardSettingsDialog extends JDialog {
         List<String> warnings = mismatchSupplier != null ? mismatchSupplier.get() : List.of();
         if (warnings.isEmpty()) {
             warningArea.setForeground(DarkTheme.SUCCESS);
-            warningArea.setText("No size mismatch detected.");
+            warningArea.setText("✓ No size mismatch detected.");
         } else {
-            warningArea.setForeground(DarkTheme.DANGER);
+            // Advisory, not blocking - amber rather than red.
+            warningArea.setForeground(DarkTheme.WARNING);
             StringBuilder sb = new StringBuilder();
             for (String w : warnings) sb.append("⚠ ").append(w).append("\n\n");
             warningArea.setText(sb.toString().trim());

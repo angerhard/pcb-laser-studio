@@ -1,7 +1,9 @@
 package de.andreasgerhard.pcblaserstudio.view.panels;
 
+import com.formdev.flatlaf.FlatClientProperties;
 import de.andreasgerhard.pcblaserstudio.service.GCodeGenerator;
 import de.andreasgerhard.pcblaserstudio.view.theme.DarkTheme;
+import de.andreasgerhard.pcblaserstudio.view.theme.Icons;
 import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
@@ -40,9 +42,11 @@ public class GCodeGenerationPanel extends JPanel {
 
         // Generate buttons
         btnGenerateActive = DarkTheme.createAccentButton("Generate Active", "Generate GCODE for the current layer");
+        btnGenerateActive.setIcon(Icons.of(Icons.SLIDERS, 13, Color.WHITE));
         btnGenerateAll    = DarkTheme.createButton("Generate All", "Generate GCODE for all enabled layers");
-        add(btnGenerateActive, "split 2, w 46%, h 22!, wmax 190");
-        add(btnGenerateAll, "w 46%, h 22!, wmax 190, wrap");
+        btnGenerateAll.setIcon(Icons.of(Icons.LAYERS, 13));
+        add(btnGenerateActive, "split 2, w 46%, h 24!, wmax 190");
+        add(btnGenerateAll, "w 46%, h 24!, wmax 190, wrap");
 
         // Progress
         progressBar = new JProgressBar(0, 100);
@@ -50,7 +54,7 @@ public class GCodeGenerationPanel extends JPanel {
         progressBar.setString("Ready");
         progressBar.setValue(0);
         progressBar.setFont(DarkTheme.FONT_SMALL);
-        add(progressBar, "growx, h 16!, wrap");
+        add(progressBar, "growx, h 14!, wrap");
 
         // Stats panel
         JPanel statsPanel = new JPanel(new MigLayout("fillx, insets 3 8 3 8, gapy 1, gapx 8", "[grow][grow]", ""));
@@ -71,36 +75,39 @@ public class GCodeGenerationPanel extends JPanel {
 
         add(statsPanel, "growx, wrap");
 
-        // Preview/Show layer visibility controls
-        JCheckBox chkShowSvg      = createCheck("SVG",      true, "Show/hide the SVG background");
-        JCheckBox chkShowOutlines = createCheck("Outlines", true, "Show/hide red outline paths");
-        JCheckBox chkShowFill     = createCheck("Fill",     true, "Show/hide blue fill paths");
+        // Preview/Show layer visibility controls - compact toggles, tinted to match path colors
+        JToggleButton chkShowSvg      = createVisToggle("SVG",  true, DarkTheme.TEXT_DIM,     "Show/hide the SVG background");
+        JToggleButton chkShowOutlines = createVisToggle("OUT",  true, DarkTheme.COLOR_OUTLINE,"Show/hide contour (outline) paths");
+        JToggleButton chkShowFill     = createVisToggle("FILL", true, DarkTheme.COLOR_FILL,   "Show/hide raster fill paths");
 
-        add(DarkTheme.createDimLabel("Show:"), "split 4, gapright 6");
+        add(DarkTheme.createDimLabel("Show:"), "split 4, gapright 4");
         add(chkShowSvg, "");
         add(chkShowOutlines, "");
         add(chkShowFill, "wrap");
 
-        // Zoom controls
-        JButton btnFit  = DarkTheme.createButton("Fit",    "Fit SVG to window");
-        JButton btnZIn  = DarkTheme.createButton("+",      "Zoom in");
-        JButton btnZOut = DarkTheme.createButton("-",      "Zoom out");
-        JButton btn100  = DarkTheme.createButton("100%",   "Actual size");
+        // Zoom controls - compact icon buttons
+        JButton btnFit  = DarkTheme.createIconButton(Icons.of(Icons.FIT, 14), "Fit SVG to window");
+        JButton btnZOut = DarkTheme.createIconButton(Icons.of(Icons.ZOOM_OUT, 14), "Zoom out");
+        JButton btn100  = DarkTheme.createButton("1:1", "Actual size");
+        JButton btnZIn  = DarkTheme.createIconButton(Icons.of(Icons.ZOOM_IN, 14), "Zoom in");
 
-        add(btnFit, "split 4, growx, h 22!, wmax 140");
-        add(btnZOut, "w 28!, h 22!");
-        add(btn100, "w 50!, h 22!");
-        add(btnZIn, "w 28!, h 22!, wrap");
+        add(btnFit, "split 4");
+        add(btnZOut, "w 26!, h 22!");
+        add(btn100, "w 36!, h 22!");
+        add(btnZIn, "w 26!, h 22!, wrap");
 
         // Export buttons
         btnExportGcode   = DarkTheme.createButton("Export GCODE",   "Save GCODE to file");
+        btnExportGcode.setIcon(Icons.of(Icons.DOWNLOAD, 13));
         btnExportProject = DarkTheme.createButton("Export Project",  "Save project as .pcblaser");
+        btnExportProject.setIcon(Icons.of(Icons.SAVE, 13));
         add(btnExportGcode, "split 2, w 46%, h 22!, wmax 190");
         add(btnExportProject, "w 46%, h 22!, wmax 190, wrap");
 
         // Send to laser cutter
         btnSendToLaser = DarkTheme.createAccentButton("Send to Laser…",
                 "Connect to a laser cutter and stream this layer's GCODE");
+        btnSendToLaser.setIcon(Icons.of(Icons.SEND, 13, Color.WHITE));
         btnSendToLaser.setEnabled(false);
         add(btnSendToLaser, "growx, h 24!, wrap");
 
@@ -165,13 +172,15 @@ public class GCodeGenerationPanel extends JPanel {
         }
     }
 
-    private static JCheckBox createCheck(String label, boolean selected, String tip) {
-        JCheckBox cb = new JCheckBox(label, selected);
-        cb.setFont(DarkTheme.FONT_SMALL);
-        cb.setForeground(DarkTheme.TEXT_DIM);
-        cb.setBackground(DarkTheme.BG_DARK);
-        cb.setToolTipText(tip);
-        return cb;
+    /** Compact toggle button tinted with the color of the path it controls. */
+    private static JToggleButton createVisToggle(String label, boolean selected, Color tint, String tip) {
+        JToggleButton btn = new JToggleButton(label, selected);
+        btn.setFont(DarkTheme.FONT_SMALL);
+        btn.setToolTipText(tip);
+        btn.setFocusable(false);
+        btn.putClientProperty(FlatClientProperties.BUTTON_TYPE, FlatClientProperties.BUTTON_TYPE_TOOLBAR_BUTTON);
+        btn.putClientProperty(FlatClientProperties.STYLE,
+                "arc: 4; margin: 2,8,2,8; selectedForeground: #111111; selectedBackground: " + DarkTheme.toHex(tint) + ";");
+        return btn;
     }
 }
-

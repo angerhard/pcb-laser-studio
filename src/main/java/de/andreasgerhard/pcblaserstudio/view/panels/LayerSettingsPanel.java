@@ -27,14 +27,11 @@ public class LayerSettingsPanel extends JPanel {
 
     public LayerSettingsPanel() {
         setLayout(new MigLayout("fillx, insets 8 8 8 8, gapy 4", "[130][grow]", ""));
-        setBorder(DarkTheme.createSectionBorder("Layer Settings"));
-        setBackground(DarkTheme.BG_DARK);
+        setOpaque(false);
 
         // Enabled
         chkEnabled = new JCheckBox("Enabled");
         chkEnabled.setFont(DarkTheme.FONT_NORMAL);
-        chkEnabled.setForeground(DarkTheme.TEXT_PRIMARY);
-        chkEnabled.setBackground(DarkTheme.BG_DARK);
         chkEnabled.setToolTipText("Include this layer in GCODE generation");
         add(chkEnabled, "span 2, wrap");
 

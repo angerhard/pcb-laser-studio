@@ -9,8 +9,9 @@ public class Layer {
     private String svgData;           // base64-encoded SVG
     private String svgFilePath;       // original file path (transient)
     private ProcessingMode processingMode = ProcessingMode.BLACK_AREA;
-    private String gcodePrefix = "G00\nG17\nG40\nG21\nG54\nG90\nM4\nM9\n";
-    private String gcodeSuffix = "G1\nS0\nM5\nG0\nX0Y0\nM2\n";
+    private String gcodePrefix = "$H\nG00\nG17\nG40\nG21\nG54\nG90\nM4\nM9\nM8\n";
+
+    private String gcodeSuffix = "M9\nG1\nS0\nM5\nG0\nX0Y0\nM2\n";
     private LaserSettings laserSettings;
     private boolean dirty = false;    // unsaved changes
 

@@ -53,9 +53,14 @@
             <version>11.2</version>
         </dependency>
         <dependency>
-            <groupId>org.pushing-pixels</groupId>
-            <artifactId>radiance-theming</artifactId>
-            <version>8.5.0</version>
+            <groupId>com.formdev</groupId>
+            <artifactId>flatlaf</artifactId>
+            <version>3.6.2</version>
+        </dependency>
+        <dependency>
+            <groupId>com.formdev</groupId>
+            <artifactId>flatlaf-extras</artifactId>
+            <version>3.6.2</version>
         </dependency>
 
         <!-- JSON Serialization -->

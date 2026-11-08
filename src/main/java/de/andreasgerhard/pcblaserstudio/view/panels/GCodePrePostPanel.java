@@ -22,8 +22,7 @@ public class GCodePrePostPanel extends JPanel {
 
     public GCodePrePostPanel() {
         setLayout(new MigLayout("fillx, insets 8 8 8 8, gapy 4", "[grow]", ""));
-        setBorder(DarkTheme.createSectionBorder("GCODE Pre/Post"));
-        setBackground(DarkTheme.BG_DARK);
+        setOpaque(false);
 
         add(DarkTheme.createDimLabel("Prefix (Before Laser):"), "wrap 2");
         txtPrefix = createTextArea("G00\nG17\nG40\nG21\nG54\nG90\nM4\nM9\n");

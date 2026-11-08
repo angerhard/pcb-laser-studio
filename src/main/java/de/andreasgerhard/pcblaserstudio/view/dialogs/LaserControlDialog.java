@@ -10,6 +10,7 @@ import de.andreasgerhard.pcblaserstudio.service.serial.LaserStreamer;
 import de.andreasgerhard.pcblaserstudio.service.serial.SerialPortInfo;
 import de.andreasgerhard.pcblaserstudio.service.serial.SimulatedLaserConnection;
 import de.andreasgerhard.pcblaserstudio.view.theme.DarkTheme;
+import de.andreasgerhard.pcblaserstudio.view.theme.Icons;
 import net.miginfocom.swing.MigLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -128,6 +129,7 @@ public class LaserControlDialog extends JDialog {
         });
         panel.add(portCombo, "growx, wmin 180");
         JButton refreshBtn = DarkTheme.createButton("Refresh", "Rescan serial ports");
+        refreshBtn.setIcon(Icons.of(Icons.REFRESH, 12));
         refreshBtn.addActionListener(e -> refreshPorts());
         panel.add(refreshBtn, "wrap");
 
@@ -143,6 +145,7 @@ public class LaserControlDialog extends JDialog {
         simCheck.setBackground(DarkTheme.BG_DARK);
         simCheck.setToolTipText("Use the built-in simulator (no hardware)");
         panel.add(simCheck);
+        connectBtn.setIcon(Icons.of(Icons.PLUG, 13));
         connectBtn.addActionListener(e -> toggleConnection());
         panel.add(connectBtn, "w 110!");
         panel.add(connStatus, "wrap, gapleft 8");
@@ -190,6 +193,9 @@ public class LaserControlDialog extends JDialog {
         timing.add(etaLabel, "wrap");
         panel.add(timing, "growx, wrap");
 
+        startBtn.setIcon(Icons.of(Icons.PLAY, 13, Color.WHITE));
+        pauseBtn.setIcon(Icons.of(Icons.PAUSE, 13));
+        stopBtn.setIcon(Icons.of(Icons.STOP, 13, DarkTheme.DANGER));
         pauseBtn.setEnabled(false);
         stopBtn.setEnabled(false);
         pauseBtn.addActionListener(e -> togglePause());
@@ -223,6 +229,7 @@ public class LaserControlDialog extends JDialog {
         consoleInput.setCaretColor(DarkTheme.TEXT_PRIMARY);
         consoleInput.setToolTipText("Send a raw command, e.g. $I, $$ or ?");
         consoleInput.addActionListener(e -> sendRawCommand());
+        consoleSend.setIcon(Icons.of(Icons.SEND, 12));
         consoleSend.addActionListener(e -> sendRawCommand());
         panel.add(consoleInput, "split 2, growx, h 24!");
         panel.add(consoleSend, "w 70!, h 24!");
@@ -374,7 +381,7 @@ public class LaserControlDialog extends JDialog {
         jobStartMillis = System.currentTimeMillis();
         elapsedTimer.start();
         startBtn.setEnabled(false);
-        pauseBtn.setText("Pause");
+        pauseBtn.setText("Pause"); pauseBtn.setIcon(Icons.of(Icons.PAUSE, 13));
         setPauseEnabled(true);
         setStopEnabled(true);
         appendConsole("--- sending " + jobName + " (" + lastTotal + " lines) ---");
@@ -398,10 +405,10 @@ public class LaserControlDialog extends JDialog {
         if (streamer == null) return;
         if (streamer.getState() == LaserStreamer.State.PAUSED) {
             streamer.resume();
-            pauseBtn.setText("Pause");
+            pauseBtn.setText("Pause"); pauseBtn.setIcon(Icons.of(Icons.PAUSE, 13));
         } else if (streamer.getState() == LaserStreamer.State.RUNNING) {
             streamer.pause();
-            pauseBtn.setText("Resume");
+            pauseBtn.setText("Resume"); pauseBtn.setIcon(Icons.of(Icons.PLAY, 13));
         }
     }
 
@@ -494,7 +501,7 @@ public class LaserControlDialog extends JDialog {
                 setPauseEnabled(false);
                 setStopEnabled(false);
                 startBtn.setEnabled(connection != null && connection.isOpen());
-                pauseBtn.setText("Pause");
+                pauseBtn.setText("Pause"); pauseBtn.setIcon(Icons.of(Icons.PAUSE, 13));
                 String msg = switch (result.finalState()) {
                     case FINISHED -> String.format(Locale.ENGLISH,
                             "Job finished: %,d lines.", result.ackedLines());

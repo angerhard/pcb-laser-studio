@@ -78,9 +78,9 @@ public class HistogramPanel extends JPanel {
             int bx = xOff + (int)(i * barW);
             int by = yOff + h - barH;
 
-            // Color gradient: blue → accent → warm
-            float hue = 0.6f - (float)(i / 100.0 * 0.5f);
-            Color barColor = Color.getHSBColor(hue, 0.7f, 0.85f);
+            // Color gradient: cyan (low power) → amber (high power)
+            float hue = 0.49f - (float) (i / 100.0 * 0.41f);
+            Color barColor = Color.getHSBColor(hue, 0.65f, 0.88f);
             g2.setColor(barColor);
             g2.fillRect(bx, by, Math.max(1, (int) barW - 1), barH);
         }

@@ -1,7 +1,7 @@
 package de.andreasgerhard.pcblaserstudio;
 
 import de.andreasgerhard.pcblaserstudio.controller.MainController;
-import org.pushingpixels.radiance.theming.api.skin.RadianceRavenLookAndFeel;
+import de.andreasgerhard.pcblaserstudio.view.theme.PcbLaserTheme;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,11 +18,11 @@ public class MainApplication {
 
         SwingUtilities.invokeLater(() -> {
             try {
-                // Set system look and feel as base, then override with our dark theme
+                // Install the custom "Graphite & Cyan" FlatLaf-based theme
                 try {
-                    UIManager.setLookAndFeel(new RadianceRavenLookAndFeel());
+                    PcbLaserTheme.setup();
                 } catch (Exception e) {
-                    log.warn("Could not set cross-platform L&F, using default: {}", e.getMessage());
+                    log.warn("Could not set custom L&F, using default: {}", e.getMessage());
                 }
                 log.info("Starting PCB Laser Studio...");
                 MainController controller = new MainController();

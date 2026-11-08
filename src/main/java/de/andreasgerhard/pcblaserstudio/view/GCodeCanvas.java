@@ -279,7 +279,7 @@ public class GCodeCanvas extends JPanel {
 
         // Draw the border pass (exact SVG bounding box) in its own distinct color
         if (gcodeResult.borderSegments() != null && !gcodeResult.borderSegments().isEmpty()) {
-            g2.setColor(DarkTheme.SUCCESS);
+            g2.setColor(DarkTheme.COLOR_BORDER);
             g2.setStroke(new BasicStroke((float) Math.max(0.6, 1.2 / zoom),
                     BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             for (int[][] seg : gcodeResult.borderSegments()) {

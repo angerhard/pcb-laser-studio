@@ -2,6 +2,7 @@ package de.andreasgerhard.pcblaserstudio.view;
 
 import de.andreasgerhard.pcblaserstudio.model.Layer;
 import de.andreasgerhard.pcblaserstudio.service.GCodeGenerator;
+import de.andreasgerhard.pcblaserstudio.view.components.CollapsibleSection;
 import de.andreasgerhard.pcblaserstudio.view.panels.*;
 import de.andreasgerhard.pcblaserstudio.view.theme.DarkTheme;
 import net.miginfocom.swing.MigLayout;
@@ -11,8 +12,9 @@ import java.awt.*;
 
 /**
  * Right-side tool panel.
- * The three settings sections (Layer, Laser, Script) live in a compact
- * tabbed pane so they are always reachable without scrolling.
+ * The three settings sections (Layer, Laser, Script) are stacked as
+ * Lightroom-style collapsible sections, so everything is reachable by
+ * scrolling rather than hidden behind sub-tabs.
  * GCODE generation controls and the histogram are pinned to the bottom.
  */
 public class ToolPanel extends JPanel {
@@ -24,27 +26,29 @@ public class ToolPanel extends JPanel {
     public final HistogramPanel histogramPanel;
 
     public ToolPanel() {
-        // Tabs row grows; bottom row takes its (compact) preferred height.
+        // Sections column grows; bottom row takes its (compact) preferred height.
         setLayout(new MigLayout("fill, insets 0, gapy 0", "[grow]", "[grow][pref]"));
         setBackground(DarkTheme.BG_DARK);
         setPreferredSize(new Dimension(300, 600));
         setMinimumSize(new Dimension(260, 0));
 
-        // --- Settings tabs (Layer / Laser / Script) ---
+        // --- Collapsible settings sections (Layer / Laser / Script) ---
         layerSettingsPanel   = new LayerSettingsPanel();
         laserParametersPanel = new LaserParametersPanel();
         gcodePrePostPanel    = new GCodePrePostPanel();
 
-        JTabbedPane settingsTabs = new JTabbedPane(JTabbedPane.TOP);
-        settingsTabs.setFont(DarkTheme.FONT_SMALL);
-        settingsTabs.setBackground(DarkTheme.BG_DARKEST);
-        settingsTabs.setForeground(DarkTheme.TEXT_PRIMARY);
-        settingsTabs.addTab("Layer",  wrapScroll(layerSettingsPanel));
-        settingsTabs.addTab("Laser",  wrapScroll(laserParametersPanel));
-        settingsTabs.addTab("Script", wrapScroll(gcodePrePostPanel));
-        settingsTabs.setToolTipTextAt(0, "Layer metadata (name, type, side, mode)");
-        settingsTabs.setToolTipTextAt(1, "Laser engraving parameters (spot radius X/Y, stepover, feed, power, offset)");
-        settingsTabs.setToolTipTextAt(2, "GCODE prefix / suffix scripts");
+        JPanel sections = new JPanel(new MigLayout("fillx, insets 0, gapy 2", "[grow]", ""));
+        sections.setOpaque(false);
+        sections.add(new CollapsibleSection("Layer", layerSettingsPanel, true), "growx, wrap");
+        sections.add(new CollapsibleSection("Laser", laserParametersPanel, true), "growx, wrap");
+        sections.add(new CollapsibleSection("Script", gcodePrePostPanel, false), "growx, wrap");
+
+        JScrollPane sectionsScroll = new JScrollPane(sections,
+                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        sectionsScroll.getVerticalScrollBar().setUnitIncrement(14);
+        sectionsScroll.setBorder(BorderFactory.createEmptyBorder());
+        sectionsScroll.getViewport().setOpaque(false);
+        sectionsScroll.setOpaque(false);
 
         // --- Bottom: generation controls + histogram (always visible) ---
         gcodeGenerationPanel = new GCodeGenerationPanel();
@@ -56,19 +60,8 @@ public class ToolPanel extends JPanel {
         bottomPanel.add(gcodeGenerationPanel, "growx, wrap");
         bottomPanel.add(histogramPanel,       "growx, h 100:100:100, wrap");
 
-        add(settingsTabs, "grow, wrap");
-        add(bottomPanel,  "growx");
-    }
-
-    /** Wraps a panel in a scroll pane without a visible border. */
-    private static JScrollPane wrapScroll(JPanel panel) {
-        JScrollPane sp = new JScrollPane(panel,
-                JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-                JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        sp.getVerticalScrollBar().setUnitIncrement(12);
-        sp.setBorder(BorderFactory.createEmptyBorder());
-        sp.setBackground(DarkTheme.BG_DARK);
-        return sp;
+        add(sectionsScroll, "grow, wrap");
+        add(bottomPanel,     "growx");
     }
 
     public void setLayer(Layer layer) {
@@ -85,4 +78,3 @@ public class ToolPanel extends JPanel {
         }
     }
 }
-

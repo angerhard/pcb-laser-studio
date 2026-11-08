@@ -3,13 +3,18 @@ package de.andreasgerhard.pcblaserstudio.view;
 import de.andreasgerhard.pcblaserstudio.model.Layer;
 import de.andreasgerhard.pcblaserstudio.model.Project;
 import de.andreasgerhard.pcblaserstudio.view.theme.DarkTheme;
+import de.andreasgerhard.pcblaserstudio.view.theme.Icons;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 /**
@@ -39,6 +44,18 @@ public class MainWindow extends JFrame {
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setMinimumSize(new Dimension(1000, 650));
         setPreferredSize(new Dimension(1280, 800));
+
+        try {
+            BufferedImage iconImage = ImageIO.read(
+                    Objects.requireNonNull(
+                            MainWindow.class.getResource("/ai_studio_code.png"),
+                            "No icon found"
+                    )
+            );
+            setIconImage(iconImage);
+        } catch (IOException e) {
+            System.err.println("Failed to load icon: " + e.getMessage());
+        }
 
         buildMenuBar();
 
@@ -157,6 +174,12 @@ public class MainWindow extends JFrame {
         menuClearSvg      = darkItem("Clear SVG from Active Tab", null);
         menuExit          = darkItem("Exit",                  "Alt+F4");
 
+        menuSave.setIcon(Icons.of(Icons.SAVE, 13));
+        menuSaveAs.setIcon(Icons.of(Icons.SAVE, 13));
+        menuOpen.setIcon(Icons.of(Icons.FOLDER_OPEN, 13));
+        menuOpenSvg.setIcon(Icons.of(Icons.FOLDER_OPEN, 13));
+        menuClearSvg.setIcon(Icons.of(Icons.CLOSE, 13));
+
         mFile.add(menuNew);
         mFile.add(menuOpen);
         mFile.addSeparator();
@@ -171,6 +194,7 @@ public class MainWindow extends JFrame {
         // Project
         JMenu mProject = darkMenu("Project");
         menuBoardSettings = darkItem("Board Settings…", null);
+        menuBoardSettings.setIcon(Icons.of(Icons.LAYERS, 13));
         mProject.add(menuBoardSettings);
 
         // Generate
@@ -180,6 +204,12 @@ public class MainWindow extends JFrame {
         menuExportGcode   = darkItem("Export GCODE…",          "Ctrl+E");
         menuExportProject = darkItem("Export Project…",        null);
         menuSendToLaser   = darkItem("Send to Laser…",         "Ctrl+L");
+
+        menuGenActive.setIcon(Icons.of(Icons.SLIDERS, 13));
+        menuGenAll.setIcon(Icons.of(Icons.LAYERS, 13));
+        menuExportGcode.setIcon(Icons.of(Icons.DOWNLOAD, 13));
+        menuExportProject.setIcon(Icons.of(Icons.SAVE, 13));
+        menuSendToLaser.setIcon(Icons.of(Icons.SEND, 13));
 
         mGen.add(menuGenActive);
         mGen.add(menuGenAll);
