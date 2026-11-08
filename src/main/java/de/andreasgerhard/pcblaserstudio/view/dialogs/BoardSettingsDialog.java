@@ -22,6 +22,8 @@ public class BoardSettingsDialog extends JDialog {
     private final JSpinner spnWidth;
     private final JSpinner spnHeight;
     private final JSpinner spnMargin;
+    private final JSpinner spnPositionX;
+    private final JSpinner spnPositionY;
     private final JComboBox<FlipAxis> cmbFlipAxis;
     private final JLabel lblFlipIcon;
     private final JCheckBox chkMirrorBack;
@@ -63,6 +65,23 @@ public class BoardSettingsDialog extends JDialog {
         spnMargin.setToolTipText("Distance from the board edge to the SVG content on the anchored sides");
         form.add(spnMargin, "split 2, w 100!");
         form.add(DarkTheme.createDimLabel("mm"), "wrap");
+
+        form.add(DarkTheme.createLabel("Position:"), "");
+        spnPositionX = createPositionSpinner(0.0);
+        spnPositionX.setToolTipText(
+                "<html>X position of the board's bottom-left corner on the machine bed (mm).<br>" +
+                "Shifts the whole board - and everything burned on it - together.</html>");
+        spnPositionY = createPositionSpinner(0.0);
+        spnPositionY.setToolTipText(
+                "<html>Y position of the board's bottom-left corner on the machine bed (mm).<br>" +
+                "Shifts the whole board - and everything burned on it - together.</html>");
+        JPanel positionRow = new JPanel(new MigLayout("insets 0, fillx, gapx 4", "[16][grow][16][grow]", ""));
+        positionRow.setOpaque(false);
+        positionRow.add(DarkTheme.createDimLabel("X:"));
+        positionRow.add(spnPositionX, "growx, w 80!");
+        positionRow.add(DarkTheme.createDimLabel("Y:"), "gapleft 6");
+        positionRow.add(spnPositionY, "growx, w 80!");
+        form.add(positionRow, "growx, wrap");
 
         form.add(DarkTheme.createLabel("Flip axis:"), "");
         lblFlipIcon = new JLabel(Icons.of(Icons.FLIP_X, 14, DarkTheme.ACCENT));
@@ -128,6 +147,8 @@ public class BoardSettingsDialog extends JDialog {
         spnWidth.addChangeListener(e -> apply());
         spnHeight.addChangeListener(e -> apply());
         spnMargin.addChangeListener(e -> apply());
+        spnPositionX.addChangeListener(e -> apply());
+        spnPositionY.addChangeListener(e -> apply());
         cmbFlipAxis.addActionListener(e -> apply());
         chkMirrorBack.addActionListener(e -> apply());
         chkBorder.addActionListener(e -> apply());
@@ -138,6 +159,8 @@ public class BoardSettingsDialog extends JDialog {
         settings.setWidthMm((Double) spnWidth.getValue());
         settings.setHeightMm((Double) spnHeight.getValue());
         settings.setMarginMm((Double) spnMargin.getValue());
+        settings.setPositionXMm((Double) spnPositionX.getValue());
+        settings.setPositionYMm((Double) spnPositionY.getValue());
         settings.setFlipAxis((FlipAxis) cmbFlipAxis.getSelectedItem());
         settings.setMirrorBackArtwork(chkMirrorBack.isSelected());
         settings.setGenerateBorder(chkBorder.isSelected());
@@ -152,6 +175,8 @@ public class BoardSettingsDialog extends JDialog {
             spnWidth.setValue(settings.getWidthMm());
             spnHeight.setValue(settings.getHeightMm());
             spnMargin.setValue(settings.getMarginMm());
+            spnPositionX.setValue(settings.getPositionXMm());
+            spnPositionY.setValue(settings.getPositionYMm());
             cmbFlipAxis.setSelectedItem(settings.getFlipAxis());
             chkMirrorBack.setSelected(settings.isMirrorBackArtwork());
             chkBorder.setSelected(settings.isGenerateBorder());
@@ -187,9 +212,18 @@ public class BoardSettingsDialog extends JDialog {
     }
 
     private static JSpinner createMmSpinner(double initial) {
-        SpinnerNumberModel model = new SpinnerNumberModel(initial, 0.0, 2000.0, 0.5);
+        return createSpinner(initial, 0.0, 2000.0, 0.5, "0.0");
+    }
+
+    /** Position can be negative (e.g. a bed origin not at the board's corner). */
+    private static JSpinner createPositionSpinner(double initial) {
+        return createSpinner(initial, -9999.0, 9999.0, 0.1, "0.00");
+    }
+
+    private static JSpinner createSpinner(double initial, double min, double max, double step, String format) {
+        SpinnerNumberModel model = new SpinnerNumberModel(initial, min, max, step);
         JSpinner spinner = new JSpinner(model);
-        JSpinner.NumberEditor editor = new JSpinner.NumberEditor(spinner, "0.0");
+        JSpinner.NumberEditor editor = new JSpinner.NumberEditor(spinner, format);
         spinner.setEditor(editor);
         spinner.setBackground(DarkTheme.BG_DARKEST);
         spinner.setForeground(DarkTheme.TEXT_PRIMARY);

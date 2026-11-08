@@ -9,10 +9,6 @@ public class LaserSettings {
     private double feedRateMmPerMin = 3000;
     private double powerPercent = 75;
     private int defaultDpi = 1000;
-    /** Offset of the lower-left corner of the engraving in mm (X axis). */
-    private double offsetXMm = 0.0;
-    /** Offset of the lower-left corner of the engraving in mm (Y axis). */
-    private double offsetYMm = 0.0;
     /** Whether to generate a contour (outline) laser pass before the fill pass. */
     private boolean generateContour = true;
     /** Feed rate for the contour pass (mm/min); independent of the fill feed rate. */
@@ -29,8 +25,6 @@ public class LaserSettings {
         this.feedRateMmPerMin = other.feedRateMmPerMin;
         this.powerPercent = other.powerPercent;
         this.defaultDpi = other.defaultDpi;
-        this.offsetXMm = other.offsetXMm;
-        this.offsetYMm = other.offsetYMm;
         this.generateContour = other.generateContour;
         this.contourFeedRateMmPerMin = other.contourFeedRateMmPerMin;
         this.contourPowerPercent = other.contourPowerPercent;
@@ -53,12 +47,6 @@ public class LaserSettings {
 
     public int getDefaultDpi() { return defaultDpi; }
     public void setDefaultDpi(int defaultDpi) { this.defaultDpi = defaultDpi; }
-
-    public double getOffsetXMm() { return offsetXMm; }
-    public void setOffsetXMm(double offsetXMm) { this.offsetXMm = offsetXMm; }
-
-    public double getOffsetYMm() { return offsetYMm; }
-    public void setOffsetYMm(double offsetYMm) { this.offsetYMm = offsetYMm; }
 
     public boolean isGenerateContour() { return generateContour; }
     public void setGenerateContour(boolean generateContour) { this.generateContour = generateContour; }

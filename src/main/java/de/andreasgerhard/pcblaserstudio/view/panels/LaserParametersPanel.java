@@ -21,7 +21,6 @@ public class LaserParametersPanel extends JPanel {
 
     private LaserSettings settings;
     private Consumer<LaserSettings> onChange;
-    private Consumer<LaserSettings> onApplyOffsetToAll;
 
     // Radius X/Y: 0 – 0.1 mm  |  100 ticks, 0.001 mm/tick
     private static final double RADIUS_TICK_MM = 0.001;
@@ -50,10 +49,6 @@ public class LaserParametersPanel extends JPanel {
     // Contour power: 0 – 100 %
     private final JSlider sldContourPower;
     private final JTextField txtContourPowerVal;
-
-    // Offset: lower-left corner in mm
-    private final JSpinner spnOffsetX;
-    private final JSpinner spnOffsetY;
 
     // Contour pass toggle
     private final JCheckBox chkContour;
@@ -169,45 +164,7 @@ public class LaserParametersPanel extends JPanel {
         add(sldContourPower, "growx, aligny center");
         add(txtContourPowerVal, "wrap 10, aligny center");
 
-        // ═══════════════ POSITION ═══════════════
-        add(createSubHeader("Position"), "span 3, growx, wrap 4");
-
-        spnOffsetX = createOffsetSpinner(0.0);
-        spnOffsetX.setToolTipText(
-                "<html>Manual fine-tune offset added on top of the board-aligned position (mm, X axis).<br>" +
-                "Leave at 0 unless you need to nudge the burn position (e.g. kerf correction).</html>");
-        spnOffsetY = createOffsetSpinner(0.0);
-        spnOffsetY.setToolTipText(
-                "<html>Manual fine-tune offset added on top of the board-aligned position (mm, Y axis).<br>" +
-                "Leave at 0 unless you need to nudge the burn position (e.g. kerf correction).</html>");
-
-        JPanel offsetRow = new JPanel(new MigLayout("insets 0, fillx, gapx 4", "[24][grow][28][grow]", ""));
-        offsetRow.setOpaque(false);
-        offsetRow.add(DarkTheme.createDimLabel("X:"));
-        offsetRow.add(spnOffsetX, "growx");
-        offsetRow.add(DarkTheme.createDimLabel("Y:"), "gapleft 6");
-        offsetRow.add(spnOffsetY, "growx");
-        add(offsetRow, "span 3, growx, wrap 2");
-
-        JButton btnApplyOffset = DarkTheme.createButton("Apply Offset to All Layers",
-                "Copy X/Y fine-tune offset to all other layers");
-        add(btnApplyOffset, "span 3, growx, h 22!, wrap");
-
         // ─── Change listeners ─────────────────────────────────────────────────
-        spnOffsetX.addChangeListener(e -> {
-            if (updating || settings == null) return;
-            settings.setOffsetXMm((Double) spnOffsetX.getValue());
-            notifyChange();
-        });
-        spnOffsetY.addChangeListener(e -> {
-            if (updating || settings == null) return;
-            settings.setOffsetYMm((Double) spnOffsetY.getValue());
-            notifyChange();
-        });
-        btnApplyOffset.addActionListener(e -> {
-            if (settings == null) return;
-            if (onApplyOffsetToAll != null) onApplyOffsetToAll.accept(settings);
-        });
         chkContour.addActionListener(e -> {
             if (updating || settings == null) return;
             settings.setGenerateContour(chkContour.isSelected());
@@ -314,9 +271,6 @@ public class LaserParametersPanel extends JPanel {
                 sldContourPower.setValue((int) Math.round(s.getContourPowerPercent()));
                 txtContourPowerVal.setText((int) s.getContourPowerPercent() + " %");
 
-                spnOffsetX.setValue(s.getOffsetXMm());
-                spnOffsetY.setValue(s.getOffsetYMm());
-
                 chkContour.setSelected(s.isGenerateContour());
             }
         } finally {
@@ -326,7 +280,6 @@ public class LaserParametersPanel extends JPanel {
     }
 
     public void setOnChange(Consumer<LaserSettings> cb) { this.onChange = cb; }
-    public void setOnApplyOffsetToAll(Consumer<LaserSettings> cb) { this.onApplyOffsetToAll = cb; }
 
     private void notifyChange() { if (onChange != null) onChange.accept(settings); }
 
@@ -340,13 +293,5 @@ public class LaserParametersPanel extends JPanel {
         // column stretches the slider to fill the actual available width anyway.
         s.setPreferredSize(new Dimension(80, s.getPreferredSize().height));
         return s;
-    }
-
-    private static JSpinner createOffsetSpinner(double initial) {
-        SpinnerNumberModel model = new SpinnerNumberModel(initial, -9999.0, 9999.0, 0.1);
-        JSpinner spinner = new JSpinner(model);
-        JSpinner.NumberEditor editor = new JSpinner.NumberEditor(spinner, "0.00");
-        spinner.setEditor(editor);
-        return spinner;
     }
 }

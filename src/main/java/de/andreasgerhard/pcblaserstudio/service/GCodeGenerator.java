@@ -36,8 +36,8 @@ public class GCodeGenerator {
      * @param borderSegments  board-border pass segments (exact SVG bounding box), empty if disabled
      * @param contentWidthMm  physical width of the SVG content (same coordinate space as segments)
      * @param contentHeightMm physical height of the SVG content
-     * @param offsetXMm     final X offset actually used (board auto-alignment + manual fine-tune)
-     * @param offsetYMm     final Y offset actually used (board auto-alignment + manual fine-tune)
+     * @param offsetXMm     final X offset actually used (board position + margin-based anchor)
+     * @param offsetYMm     final Y offset actually used (board position + margin-based anchor)
      * @param mirrorX       whether the rendered artwork was mirrored horizontally for this layer
      * @param mirrorY       whether the rendered artwork was mirrored vertically for this layer
      */
@@ -121,16 +121,16 @@ public class GCodeGenerator {
         double contentHeightMm = contentBounds.heightMm();
         double pxPerMm         = actualW / contentWidthMm;
 
-        // ── 2b. Final offset: board auto-alignment + per-layer manual fine-tune ──
+        // ── 2b. Final offset: board position + margin-based anchor ──────────
         double offsetXMm, offsetYMm;
         if (boardSettings != null) {
             BoardAlignmentService.Offset base = BoardAlignmentService.computeBaseOffset(
                     boardSettings, layer.getSide(), contentWidthMm, contentHeightMm);
-            offsetXMm = base.xMm() + ls.getOffsetXMm();
-            offsetYMm = base.yMm() + ls.getOffsetYMm();
+            offsetXMm = base.xMm();
+            offsetYMm = base.yMm();
         } else {
-            offsetXMm = ls.getOffsetXMm();
-            offsetYMm = ls.getOffsetYMm();
+            offsetXMm = 0.0;
+            offsetYMm = 0.0;
         }
 
         int radiusXPx = (int) Math.round(ls.getRadiusXMm() * pxPerMm);
@@ -185,7 +185,7 @@ public class GCodeGenerator {
                 "; Feed: %d mm/min, Power: %.0f%%\n", feedRate, ls.getPowerPercent()));
         sb.append(String.format(Locale.ENGLISH,
                 "; Offset: X=%.3f mm, Y=%.3f mm%s\n\n",
-                offsetXMm, offsetYMm, boardSettings != null ? " (board-aligned + manual fine-tune)" : ""));
+                offsetXMm, offsetYMm, boardSettings != null ? " (board position + margin)" : ""));
 
         // Pre-GCODE
         if (layer.getGcodePrefix() != null && !layer.getGcodePrefix().isBlank()) {

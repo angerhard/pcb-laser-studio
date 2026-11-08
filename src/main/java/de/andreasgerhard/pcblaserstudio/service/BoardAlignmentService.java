@@ -33,23 +33,26 @@ public class BoardAlignmentService {
     private BoardAlignmentService() {}
 
     /**
-     * Computes the auto-aligned base offset (before any per-layer manual
-     * fine-tune offset is added) for a piece of content of the given
-     * physical size.
+     * Computes the auto-aligned base offset for a piece of content of the
+     * given physical size: the board's position on the machine bed (the
+     * bottom-left corner of the whole board) plus the margin-based anchor
+     * within the board, mirrored for the back side per the flip axis.
      */
     public static Offset computeBaseOffset(BoardSettings board, LayerSide side,
                                             double contentWidthMm, double contentHeightMm) {
+        double posX = board.getPositionXMm();
+        double posY = board.getPositionYMm();
         double margin = board.getMarginMm();
         if (side == LayerSide.FRONT) {
-            return new Offset(margin, margin);
+            return new Offset(posX + margin, posY + margin);
         }
         // BACK — mirrored across the board's own center line on the flip axis
         if (board.getFlipAxis() == FlipAxis.VERTICAL) {
             double x = board.getWidthMm() - margin - contentWidthMm;
-            return new Offset(x, margin);
+            return new Offset(posX + x, posY + margin);
         } else {
             double y = board.getHeightMm() - margin - contentHeightMm;
-            return new Offset(margin, y);
+            return new Offset(posX + margin, posY + y);
         }
     }
 

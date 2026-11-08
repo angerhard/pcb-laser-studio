@@ -188,7 +188,7 @@ public class SvgCanvas extends JPanel {
 
     /**
      * Recomputes the board-space layout (board size, content offset, mirror).
-     * Call after the SVG, layer side, manual offset, or board settings change.
+     * Call after the SVG, layer side, or board settings change.
      */
     public void refreshAlignment() {
         recomputeAlignment();
@@ -213,12 +213,10 @@ public class SvgCanvas extends JPanel {
         boardHeightPx = boardSettings.getHeightMm() * pxPerMmY;
 
         LayerSide side  = layer != null ? layer.getSide() : LayerSide.FRONT;
-        double manualX  = layer != null ? layer.getLaserSettings().getOffsetXMm() : 0;
-        double manualY  = layer != null ? layer.getLaserSettings().getOffsetYMm() : 0;
         BoardAlignmentService.Offset base = BoardAlignmentService.computeBaseOffset(
                 boardSettings, side, cb.widthMm(), cb.heightMm());
-        offsetXPx = (base.xMm() + manualX) * pxPerMmX;
-        offsetYPx = (base.yMm() + manualY) * pxPerMmY;
+        offsetXPx = base.xMm() * pxPerMmX;
+        offsetYPx = base.yMm() * pxPerMmY;
 
         if (side == LayerSide.BACK && boardSettings.isMirrorBackArtwork()) {
             if (boardSettings.getFlipAxis() == FlipAxis.VERTICAL) mirrorX = true;

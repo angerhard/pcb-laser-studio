@@ -11,6 +11,10 @@ public class BoardSettings {
     private double heightMm = 80.0;
     /** Distance from the board edge to the SVG content on the anchored sides. */
     private double marginMm = 5.0;
+    /** X position of the board's bottom-left corner on the machine bed, in mm. */
+    private double positionXMm = 0.0;
+    /** Y position of the board's bottom-left corner on the machine bed, in mm. */
+    private double positionYMm = 0.0;
     /** Axis the board is turned over around when switching from front to back. */
     private FlipAxis flipAxis = FlipAxis.VERTICAL;
     /** Whether back-side artwork should be mirrored by the app before burning. */
@@ -24,6 +28,8 @@ public class BoardSettings {
         this.widthMm = other.widthMm;
         this.heightMm = other.heightMm;
         this.marginMm = other.marginMm;
+        this.positionXMm = other.positionXMm;
+        this.positionYMm = other.positionYMm;
         this.flipAxis = other.flipAxis;
         this.mirrorBackArtwork = other.mirrorBackArtwork;
         this.generateBorder = other.generateBorder;
@@ -37,6 +43,12 @@ public class BoardSettings {
 
     public double getMarginMm() { return marginMm; }
     public void setMarginMm(double marginMm) { this.marginMm = marginMm; }
+
+    public double getPositionXMm() { return positionXMm; }
+    public void setPositionXMm(double positionXMm) { this.positionXMm = positionXMm; }
+
+    public double getPositionYMm() { return positionYMm; }
+    public void setPositionYMm(double positionYMm) { this.positionYMm = positionYMm; }
 
     public FlipAxis getFlipAxis() { return flipAxis; }
     public void setFlipAxis(FlipAxis flipAxis) { this.flipAxis = flipAxis; }

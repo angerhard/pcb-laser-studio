@@ -118,7 +118,6 @@ public class MainController {
             active.toolPanel.updateGcodeStats(null);
             window.updateTitle(project);
             window.refreshTabHeaders();
-            active.svgCanvas.refreshAlignment();
         });
 
         // GCode pre/post changes → clear cached gcode
@@ -140,18 +139,6 @@ public class MainController {
                 gcodeCache.remove(layer.getId());
             }
             window.setStatus("GCODE prefix/suffix applied to all layers");
-        });
-
-        // Laser offset → apply to all layers
-        active.toolPanel.laserParametersPanel.setOnApplyOffsetToAll(sourceSettings -> {
-            for (Layer layer : project.getLayers()) {
-                layer.getLaserSettings().setOffsetXMm(sourceSettings.getOffsetXMm());
-                layer.getLaserSettings().setOffsetYMm(sourceSettings.getOffsetYMm());
-                gcodeCache.remove(layer.getId());
-            }
-            window.setStatus(String.format(
-                    "Offset X=%.3f mm, Y=%.3f mm applied to all layers",
-                    sourceSettings.getOffsetXMm(), sourceSettings.getOffsetYMm()));
         });
 
         // SVG drag-drop
