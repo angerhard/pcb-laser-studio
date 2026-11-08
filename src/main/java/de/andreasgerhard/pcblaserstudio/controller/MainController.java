@@ -1,14 +1,17 @@
 package de.andreasgerhard.pcblaserstudio.controller;
 
+import de.andreasgerhard.pcblaserstudio.model.BoardSettings;
 import de.andreasgerhard.pcblaserstudio.model.ConnectionSettings;
 import de.andreasgerhard.pcblaserstudio.model.Layer;
 import de.andreasgerhard.pcblaserstudio.model.Project;
+import de.andreasgerhard.pcblaserstudio.service.BoardAlignmentService;
 import de.andreasgerhard.pcblaserstudio.service.GCodeGenerator;
 import de.andreasgerhard.pcblaserstudio.service.PreferencesService;
 import de.andreasgerhard.pcblaserstudio.service.ProjectSerializer;
 import de.andreasgerhard.pcblaserstudio.service.SvgParser;
 import de.andreasgerhard.pcblaserstudio.view.LayerTab;
 import de.andreasgerhard.pcblaserstudio.view.MainWindow;
+import de.andreasgerhard.pcblaserstudio.view.dialogs.BoardSettingsDialog;
 import de.andreasgerhard.pcblaserstudio.view.dialogs.LaserControlDialog;
 import de.andreasgerhard.pcblaserstudio.view.panels.GCodeGenerationPanel;
 import org.slf4j.Logger;
@@ -21,6 +24,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,6 +40,7 @@ public class MainController {
     private final PreferencesService preferencesService = new PreferencesService();
     private ConnectionSettings connectionSettings;
     private LaserControlDialog laserDialog;
+    private BoardSettingsDialog boardSettingsDialog;
 
     // Per-tab parse results cache
     private final Map<String, SvgParser.SvgParseResult> parseCache   = new HashMap<>();
@@ -76,6 +81,7 @@ public class MainController {
         window.menuExportGcode.addActionListener(e -> onExportGcode());
         window.menuExportProject.addActionListener(e -> onSaveProject(true));
         window.menuSendToLaser.addActionListener(e -> onSendToLaser());
+        window.menuBoardSettings.addActionListener(e -> onBoardSettings());
         window.menuAbout.addActionListener(e -> onAbout());
     }
 
@@ -97,10 +103,11 @@ public class MainController {
         LayerTab active = window.getActiveTab();
         if (active == null) return;
 
-        // Layer settings changes → refresh tab header
+        // Layer settings changes → refresh tab header (side changes affect board alignment)
         active.toolPanel.layerSettingsPanel.setOnChange(layer -> {
             window.refreshTabHeaders();
             window.updateTitle(project);
+            active.svgCanvas.refreshAlignment();
         });
 
         // Laser settings changes → clear cached gcode, mark project dirty
@@ -111,6 +118,7 @@ public class MainController {
             active.toolPanel.updateGcodeStats(null);
             window.updateTitle(project);
             window.refreshTabHeaders();
+            active.svgCanvas.refreshAlignment();
         });
 
         // GCode pre/post changes → clear cached gcode
@@ -232,6 +240,9 @@ public class MainController {
                             file.getName(), result.svgWidth(), result.svgHeight()));
                     window.updateTitle(project);
                     window.refreshTabHeaders();
+                    if (boardSettingsDialog != null && boardSettingsDialog.isDisplayable()) {
+                        boardSettingsDialog.refreshWarnings();
+                    }
                 } catch (Exception ex) {
                     log.error("SVG load error", ex);
                     JOptionPane.showMessageDialog(window,
@@ -298,7 +309,7 @@ public class MainController {
         new SwingWorker<GCodeGenerator.GCodeResult, Integer>() {
             @Override
             protected GCodeGenerator.GCodeResult doInBackground() {
-                return GCodeGenerator.generate(layer, parseResult, 4096, 4096, this::publish);
+                return GCodeGenerator.generate(layer, parseResult, project.getBoardSettings(), 4096, 4096, this::publish);
             }
 
             @Override
@@ -383,6 +394,36 @@ public class MainController {
         window.setStatus("Send to laser: " + tab.getLayer().getName());
     }
 
+    // =================== Board settings ===================
+
+    private void onBoardSettings() {
+        if (boardSettingsDialog == null || !boardSettingsDialog.isDisplayable()) {
+            boardSettingsDialog = new BoardSettingsDialog(window, this::computeSizeMismatches);
+            boardSettingsDialog.setOnChange(this::onBoardSettingsChanged);
+        }
+        boardSettingsDialog.setBoardSettings(project.getBoardSettings());
+        boardSettingsDialog.setVisible(true);
+        boardSettingsDialog.toFront();
+    }
+
+    private List<String> computeSizeMismatches() {
+        return BoardAlignmentService.findSizeMismatches(project, parseCache);
+    }
+
+    private void onBoardSettingsChanged(BoardSettings settings) {
+        // Board settings affect the auto-alignment of every layer - invalidate all cached GCODE.
+        gcodeCache.clear();
+        for (LayerTab tab : window.getAllTabs()) {
+            tab.gcodeCanvas.clearGcodeResult();
+            tab.toolPanel.updateGcodeStats(null);
+            tab.getLayer().setDirty(true);
+            tab.svgCanvas.refreshAlignment();
+        }
+        window.updateTitle(project);
+        window.refreshTabHeaders();
+        window.setStatus("Board settings updated — regenerate GCODE to apply the new alignment");
+    }
+
     // =================== Project save/load ===================
 
     private void onNewProject() {
@@ -395,6 +436,9 @@ public class MainController {
         wirePanelCallbacks();
         window.updateTitle(project);
         window.setStatus("New project created");
+        if (boardSettingsDialog != null && boardSettingsDialog.isDisplayable()) {
+            boardSettingsDialog.setBoardSettings(project.getBoardSettings());
+        }
     }
 
     private void onOpenProject() {
@@ -432,6 +476,9 @@ public class MainController {
 
                 window.updateTitle(project);
                 window.setStatus("Project loaded: " + fc.getSelectedFile().getName());
+                if (boardSettingsDialog != null && boardSettingsDialog.isDisplayable()) {
+                    boardSettingsDialog.setBoardSettings(project.getBoardSettings());
+                }
             } catch (Exception ex) {
                 log.error("Project load error", ex);
                 JOptionPane.showMessageDialog(window,

@@ -1,5 +1,6 @@
 package de.andreasgerhard.pcblaserstudio.view;
 
+import de.andreasgerhard.pcblaserstudio.model.BoardSettings;
 import de.andreasgerhard.pcblaserstudio.service.GCodeGenerator;
 import de.andreasgerhard.pcblaserstudio.view.theme.DarkTheme;
 import org.slf4j.Logger;
@@ -29,6 +30,13 @@ public class GCodeCanvas extends JPanel {
 
     private boolean showOutlines = true;
     private boolean showFill     = true;
+
+    // ── Board-space alignment (physical PCB preview) ────────────────────────
+    private BoardSettings boardSettings;
+    private double boardWidthPx  = 0;
+    private double boardHeightPx = 0;
+    private double offsetXPx = 0;
+    private double offsetYPx = 0;
 
     double zoom = 1.0;
     double panX = 0;
@@ -96,11 +104,13 @@ public class GCodeCanvas extends JPanel {
 
     public void setGcodeResult(GCodeGenerator.GCodeResult result) {
         this.gcodeResult = result;
+        recomputeBoardLayout();
         repaint();
     }
 
     public void clearGcodeResult() {
         this.gcodeResult = null;
+        recomputeBoardLayout();
         repaint();
     }
 
@@ -112,7 +122,33 @@ public class GCodeCanvas extends JPanel {
     public void setImageSize(int w, int h) {
         this.imgWidth  = w;
         this.imgHeight = h;
+        recomputeBoardLayout();
         repaint();
+    }
+
+    /** Sets the project's board settings and recomputes the board-space preview. */
+    public void setBoardSettings(BoardSettings boardSettings) {
+        this.boardSettings = boardSettings;
+        recomputeBoardLayout();
+        repaint();
+    }
+
+    /** Computes the board outline size and the content's board-aligned offset, in local px. */
+    private void recomputeBoardLayout() {
+        if (boardSettings == null || gcodeResult == null || imgWidth <= 0 || imgHeight <= 0
+                || gcodeResult.contentWidthMm() <= 0 || gcodeResult.contentHeightMm() <= 0) {
+            boardWidthPx  = imgWidth;
+            boardHeightPx = imgHeight;
+            offsetXPx = 0;
+            offsetYPx = 0;
+            return;
+        }
+        double pxPerMmX = imgWidth  / gcodeResult.contentWidthMm();
+        double pxPerMmY = imgHeight / gcodeResult.contentHeightMm();
+        boardWidthPx  = boardSettings.getWidthMm()  * pxPerMmX;
+        boardHeightPx = boardSettings.getHeightMm() * pxPerMmY;
+        offsetXPx = gcodeResult.offsetXMm() * pxPerMmX;
+        offsetYPx = gcodeResult.offsetYMm() * pxPerMmY;
     }
 
     public void setShowOutlines(boolean show) { showOutlines = show; repaint(); }
@@ -132,13 +168,15 @@ public class GCodeCanvas extends JPanel {
 
     public void fitToWindow() {
         if (imgWidth <= 0 || imgHeight <= 0) return;
+        double contentW = boardWidthPx  > 0 ? boardWidthPx  : imgWidth;
+        double contentH = boardHeightPx > 0 ? boardHeightPx : imgHeight;
         int pw = getWidth()  > 0 ? getWidth()  : 800;
         int ph = getHeight() > 0 ? getHeight() : 600;
-        double sx = (pw - 40.0) / imgWidth;
-        double sy = (ph - 40.0) / imgHeight;
+        double sx = (pw - 40.0) / contentW;
+        double sy = (ph - 40.0) / contentH;
         zoom = Math.min(sx, sy);
-        panX = (pw - imgWidth  * zoom) / 2.0;
-        panY = (ph - imgHeight * zoom) / 2.0;
+        panX = (pw - contentW * zoom) / 2.0;
+        panY = (ph - contentH * zoom) / 2.0;
         repaint();
     }
 
@@ -157,27 +195,36 @@ public class GCodeCanvas extends JPanel {
             g2.translate(panX, panY);
             g2.scale(zoom, zoom);
 
-            // White PCB board background
+            // White PCB board background, at the board's true physical size.
+            int bw = boardWidthPx  > 0 ? (int) Math.round(boardWidthPx)  : imgWidth;
+            int bh = boardHeightPx > 0 ? (int) Math.round(boardHeightPx) : imgHeight;
             g2.setColor(Color.WHITE);
-            g2.fillRect(0, 0, imgWidth, imgHeight);
+            g2.fillRect(0, 0, bw, bh);
+            g2.setColor(DarkTheme.BG_LIGHT);
+            g2.setStroke(new BasicStroke((float)(1.5 / zoom)));
+            g2.drawRect(0, 0, bw, bh);
+
+            Graphics2D cg = (Graphics2D) g2.create();
+            cg.translate(offsetXPx, offsetYPx);
 
             if (gcodeResult != null) {
-                drawLaserPaths(g2);
+                drawLaserPaths(cg);
             } else {
                 // Inline hint – rendered in image space so it scales with zoom
-                g2.setColor(new Color(0x88, 0x88, 0x88));
-                g2.setFont(DarkTheme.FONT_BOLD);
+                cg.setColor(new Color(0x88, 0x88, 0x88));
+                cg.setFont(DarkTheme.FONT_BOLD);
                 String msg  = "Generate GCode to see laser paths";
-                FontMetrics fm = g2.getFontMetrics();
-                g2.drawString(msg,
+                FontMetrics fm = cg.getFontMetrics();
+                cg.drawString(msg,
                         (int)((imgWidth  - fm.stringWidth(msg)) / 2.0),
                         (int)((imgHeight + fm.getAscent())       / 2.0));
             }
 
             // SVG-area border
-            g2.setColor(DarkTheme.BG_MEDIUM);
-            g2.setStroke(new BasicStroke((float)(1.0 / zoom)));
-            g2.drawRect(0, 0, imgWidth, imgHeight);
+            cg.setColor(DarkTheme.BG_MEDIUM);
+            cg.setStroke(new BasicStroke((float)(1.0 / zoom)));
+            cg.drawRect(0, 0, imgWidth, imgHeight);
+            cg.dispose();
         }
 
         g2.dispose();
@@ -224,6 +271,18 @@ public class GCodeCanvas extends JPanel {
             g2.setStroke(new BasicStroke((float) Math.max(0.5, 1.0 / zoom),
                     BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             for (int[][] seg : gcodeResult.outlineSegments()) {
+                int x1 = (int) Math.round(seg[0][0] * scaleX), y1 = (int) Math.round(seg[0][1] * scaleY);
+                int x2 = (int) Math.round(seg[1][0] * scaleX), y2 = (int) Math.round(seg[1][1] * scaleY);
+                g2.drawLine(x1, y1, x2, y2);
+            }
+        }
+
+        // Draw the border pass (exact SVG bounding box) in its own distinct color
+        if (gcodeResult.borderSegments() != null && !gcodeResult.borderSegments().isEmpty()) {
+            g2.setColor(DarkTheme.SUCCESS);
+            g2.setStroke(new BasicStroke((float) Math.max(0.6, 1.2 / zoom),
+                    BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            for (int[][] seg : gcodeResult.borderSegments()) {
                 int x1 = (int) Math.round(seg[0][0] * scaleX), y1 = (int) Math.round(seg[0][1] * scaleY);
                 int x2 = (int) Math.round(seg[1][0] * scaleX), y2 = (int) Math.round(seg[1][1] * scaleY);
                 g2.drawLine(x1, y1, x2, y2);

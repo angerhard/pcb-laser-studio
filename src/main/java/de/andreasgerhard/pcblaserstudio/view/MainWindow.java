@@ -28,6 +28,7 @@ public class MainWindow extends JFrame {
     public JMenuItem menuOpenSvg, menuClearSvg;
     public JMenuItem menuGenAll, menuGenActive, menuExportGcode, menuExportProject;
     public JMenuItem menuSendToLaser;
+    public JMenuItem menuBoardSettings;
     public JMenuItem menuAbout;
 
     private Consumer<Integer> onTabChanged;
@@ -91,6 +92,9 @@ public class MainWindow extends JFrame {
         for (Layer layer : project.getLayers()) {
             LayerTab tab = new LayerTab(layer);
             LayerTabComponent header = new LayerTabComponent(layer);
+
+            tab.svgCanvas.setBoardSettings(project.getBoardSettings());
+            tab.gcodeCanvas.setBoardSettings(project.getBoardSettings());
 
             layerTabs.add(tab);
             tabComponents.add(header);
@@ -164,6 +168,11 @@ public class MainWindow extends JFrame {
         mFile.addSeparator();
         mFile.add(menuExit);
 
+        // Project
+        JMenu mProject = darkMenu("Project");
+        menuBoardSettings = darkItem("Board Settings…", null);
+        mProject.add(menuBoardSettings);
+
         // Generate
         JMenu mGen = darkMenu("Generate");
         menuGenActive     = darkItem("Generate Active Layer",  "F5");
@@ -186,6 +195,7 @@ public class MainWindow extends JFrame {
         mHelp.add(menuAbout);
 
         menuBar.add(mFile);
+        menuBar.add(mProject);
         menuBar.add(mGen);
         menuBar.add(mHelp);
         setJMenuBar(menuBar);

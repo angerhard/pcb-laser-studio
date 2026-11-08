@@ -1,6 +1,10 @@
 package de.andreasgerhard.pcblaserstudio.view;
 
+import de.andreasgerhard.pcblaserstudio.model.BoardSettings;
+import de.andreasgerhard.pcblaserstudio.model.FlipAxis;
 import de.andreasgerhard.pcblaserstudio.model.Layer;
+import de.andreasgerhard.pcblaserstudio.model.LayerSide;
+import de.andreasgerhard.pcblaserstudio.service.BoardAlignmentService;
 import de.andreasgerhard.pcblaserstudio.service.SvgParser;
 import de.andreasgerhard.pcblaserstudio.view.theme.DarkTheme;
 import org.slf4j.Logger;
@@ -31,6 +35,15 @@ public class SvgCanvas extends JPanel {
     private BufferedImage svgImage;
 
     private boolean showSvg = true;
+
+    // ── Board-space alignment (physical PCB preview) ────────────────────────
+    private BoardSettings boardSettings;
+    private double boardWidthPx  = 0;
+    private double boardHeightPx = 0;
+    private double offsetXPx = 0;
+    private double offsetYPx = 0;
+    private boolean mirrorX = false;
+    private boolean mirrorY = false;
 
     private double zoom = 1.0;
     private double panX = 0;
@@ -166,6 +179,53 @@ public class SvgCanvas extends JPanel {
 
     public void setLayer(Layer layer) { this.layer = layer; }
 
+    /** Sets the project's board settings and recomputes the board-space preview. */
+    public void setBoardSettings(BoardSettings boardSettings) {
+        this.boardSettings = boardSettings;
+        recomputeAlignment();
+        repaint();
+    }
+
+    /**
+     * Recomputes the board-space layout (board size, content offset, mirror).
+     * Call after the SVG, layer side, manual offset, or board settings change.
+     */
+    public void refreshAlignment() {
+        recomputeAlignment();
+        repaint();
+    }
+
+    private void recomputeAlignment() {
+        mirrorX = false;
+        mirrorY = false;
+        if (boardSettings == null || parseResult == null || svgImage == null) {
+            boardWidthPx  = svgImage != null ? svgImage.getWidth()  : 0;
+            boardHeightPx = svgImage != null ? svgImage.getHeight() : 0;
+            offsetXPx = 0;
+            offsetYPx = 0;
+            return;
+        }
+        SvgParser.ContentBounds cb = SvgParser.getContentBounds(parseResult);
+        double pxPerMmX = svgImage.getWidth()  / cb.widthMm();
+        double pxPerMmY = svgImage.getHeight() / cb.heightMm();
+
+        boardWidthPx  = boardSettings.getWidthMm()  * pxPerMmX;
+        boardHeightPx = boardSettings.getHeightMm() * pxPerMmY;
+
+        LayerSide side  = layer != null ? layer.getSide() : LayerSide.FRONT;
+        double manualX  = layer != null ? layer.getLaserSettings().getOffsetXMm() : 0;
+        double manualY  = layer != null ? layer.getLaserSettings().getOffsetYMm() : 0;
+        BoardAlignmentService.Offset base = BoardAlignmentService.computeBaseOffset(
+                boardSettings, side, cb.widthMm(), cb.heightMm());
+        offsetXPx = (base.xMm() + manualX) * pxPerMmX;
+        offsetYPx = (base.yMm() + manualY) * pxPerMmY;
+
+        if (side == LayerSide.BACK && boardSettings.isMirrorBackArtwork()) {
+            if (boardSettings.getFlipAxis() == FlipAxis.VERTICAL) mirrorX = true;
+            else mirrorY = true;
+        }
+    }
+
     public void setSvgParseResult(SvgParser.SvgParseResult result, int renderSize) {
         renderDebounceTimer.stop();
         this.parseResult = result;
@@ -182,6 +242,7 @@ public class SvgCanvas extends JPanel {
             @Override protected void done() {
                 try {
                     svgImage = get();
+                    recomputeAlignment();
                     // Notify GCodeCanvas of the new coordinate-space size
                     if (onImageReady != null)
                         onImageReady.accept(new Dimension(svgImage.getWidth(), svgImage.getHeight()));
@@ -215,13 +276,15 @@ public class SvgCanvas extends JPanel {
 
     public void fitToWindow() {
         if (svgImage == null) return;
+        double contentW = boardWidthPx  > 0 ? boardWidthPx  : svgImage.getWidth();
+        double contentH = boardHeightPx > 0 ? boardHeightPx : svgImage.getHeight();
         int pw = getWidth()  > 0 ? getWidth()  : 800;
         int ph = getHeight() > 0 ? getHeight() : 600;
-        double scaleX = (pw - 40.0) / svgImage.getWidth();
-        double scaleY = (ph - 40.0) / svgImage.getHeight();
+        double scaleX = (pw - 40.0) / contentW;
+        double scaleY = (ph - 40.0) / contentH;
         zoom = Math.min(scaleX, scaleY);
-        panX = (pw - svgImage.getWidth()  * zoom) / 2.0;
-        panY = (ph - svgImage.getHeight() * zoom) / 2.0;
+        panX = (pw - contentW * zoom) / 2.0;
+        panY = (ph - contentH * zoom) / 2.0;
         fireViewportChanged();
         repaint();
     }
@@ -251,17 +314,35 @@ public class SvgCanvas extends JPanel {
             g2.translate(panX, panY);
             g2.scale(zoom, zoom);
 
+            // Physical board outline, drawn behind the SVG content at its true scale.
+            if (boardWidthPx > 0 && boardHeightPx > 0) {
+                int bw = (int) Math.round(boardWidthPx), bh = (int) Math.round(boardHeightPx);
+                g2.setColor(new Color(0x3a, 0x3a, 0x3a));
+                g2.fillRect(0, 0, bw, bh);
+                g2.setColor(DarkTheme.BG_LIGHT);
+                g2.setStroke(new BasicStroke((float)(1.5 / zoom)));
+                g2.drawRect(0, 0, bw, bh);
+            }
+
+            // Content, translated to its board-aligned position (and mirrored for
+            // back-side artwork when enabled), drawn on top of the board outline.
+            Graphics2D cg = (Graphics2D) g2.create();
+            cg.translate(offsetXPx, offsetYPx);
+            if (mirrorX) { cg.translate(svgImage.getWidth(), 0); cg.scale(-1, 1); }
+            if (mirrorY) { cg.translate(0, svgImage.getHeight()); cg.scale(1, -1); }
+
             if (showSvg) {
-                g2.drawImage(svgImage, 0, 0, null);
+                cg.drawImage(svgImage, 0, 0, null);
             } else {
-                g2.setColor(Color.WHITE);
-                g2.fillRect(0, 0, svgImage.getWidth(), svgImage.getHeight());
+                cg.setColor(Color.WHITE);
+                cg.fillRect(0, 0, svgImage.getWidth(), svgImage.getHeight());
             }
 
             // SVG-area border
-            g2.setColor(DarkTheme.BG_MEDIUM);
-            g2.setStroke(new BasicStroke((float)(1.0 / zoom)));
-            g2.drawRect(0, 0, svgImage.getWidth(), svgImage.getHeight());
+            cg.setColor(DarkTheme.BG_MEDIUM);
+            cg.setStroke(new BasicStroke((float)(1.0 / zoom)));
+            cg.drawRect(0, 0, svgImage.getWidth(), svgImage.getHeight());
+            cg.dispose();
         }
 
         g2.dispose();
@@ -346,6 +427,7 @@ public class SvgCanvas extends JPanel {
             @Override protected void done() {
                 try {
                     svgImage = get();
+                    recomputeAlignment();
                     zoom = zoom / scaleFactor;   // keep screen position identical
                     // Forward new image size to GCodeCanvas
                     if (onImageReady != null)

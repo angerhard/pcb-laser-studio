@@ -33,6 +33,9 @@ public class SvgParser {
     private static final Logger log = LoggerFactory.getLogger(SvgParser.class);
     private static final GeometryFactory GF = new GeometryFactory();
 
+    /** Batik device pixel = 1/96 inch = 25.4/96 mm → 1 mm = 96/25.4 ≈ 3.7795 Batik px. */
+    public static final double MM_PER_BATIK_PX = 25.4 / 96.0;
+
     public record SvgParseResult(
             GraphicsNode graphicsNode,
             Document document,
@@ -40,6 +43,33 @@ public class SvgParser {
             double svgHeight,
             List<Geometry> geometries
     ) {}
+
+    /**
+     * Actual rendered content bounds of a parsed SVG, in both Batik device
+     * pixels and physical millimetres. This is the single source of truth
+     * used by {@link de.andreasgerhard.pcblaserstudio.service.GCodeGenerator}
+     * and the board-alignment logic, so every consumer agrees on the exact
+     * physical size of the content.
+     */
+    public record ContentBounds(double widthPx, double heightPx, double widthMm, double heightMm) {}
+
+    /**
+     * Returns the actual rendering bounds of the parsed SVG content.
+     * Falls back to the declared {@code svgWidth}/{@code svgHeight} attributes
+     * when Batik can't report bounds (e.g. empty document).
+     */
+    public static ContentBounds getContentBounds(SvgParseResult result) {
+        Rectangle2D bounds = result.graphicsNode().getBounds();
+        double w, h;
+        if (bounds != null && bounds.getWidth() > 0 && bounds.getHeight() > 0) {
+            w = bounds.getWidth();
+            h = bounds.getHeight();
+        } else {
+            w = result.svgWidth();
+            h = result.svgHeight();
+        }
+        return new ContentBounds(w, h, w * MM_PER_BATIK_PX, h * MM_PER_BATIK_PX);
+    }
 
     /**
      * Parse SVG from a base64-encoded string.

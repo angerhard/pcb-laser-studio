@@ -7,6 +7,7 @@ public class Project {
     private String version = "1.0";
     private ProjectMetadata metadata;
     private LaserSettings laserSettings;
+    private BoardSettings boardSettings;
     private List<Layer> layers;
     private GlobalGcode globalGcode;
     private String filePath; // transient - not serialized
@@ -14,6 +15,7 @@ public class Project {
     public Project() {
         this.metadata = new ProjectMetadata();
         this.laserSettings = new LaserSettings();
+        this.boardSettings = new BoardSettings();
         this.globalGcode = new GlobalGcode();
         this.layers = new ArrayList<>();
         initDefaultLayers();
@@ -36,6 +38,9 @@ public class Project {
 
     public LaserSettings getLaserSettings() { return laserSettings; }
     public void setLaserSettings(LaserSettings laserSettings) { this.laserSettings = laserSettings; }
+
+    public BoardSettings getBoardSettings() { return boardSettings; }
+    public void setBoardSettings(BoardSettings boardSettings) { this.boardSettings = boardSettings; }
 
     public List<Layer> getLayers() { return layers; }
     public void setLayers(List<Layer> layers) { this.layers = layers; }

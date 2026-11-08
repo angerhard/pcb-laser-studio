@@ -1,7 +1,11 @@
 package de.andreasgerhard.pcblaserstudio.service;
 
+import de.andreasgerhard.pcblaserstudio.model.BoardSettings;
+import de.andreasgerhard.pcblaserstudio.model.FlipAxis;
 import de.andreasgerhard.pcblaserstudio.model.LaserSettings;
 import de.andreasgerhard.pcblaserstudio.model.Layer;
+import de.andreasgerhard.pcblaserstudio.model.LayerSide;
+import de.andreasgerhard.pcblaserstudio.model.LayerType;
 import de.andreasgerhard.pcblaserstudio.model.ProcessingMode;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
@@ -11,7 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.*;
-import java.awt.geom.Rectangle2D;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,23 +33,40 @@ public class GCodeGenerator {
     /**
      * @param renderWidth   pixel width used for the analysis image and segment coordinates
      * @param renderHeight  pixel height used for the analysis image and segment coordinates
+     * @param borderSegments  board-border pass segments (exact SVG bounding box), empty if disabled
+     * @param contentWidthMm  physical width of the SVG content (same coordinate space as segments)
+     * @param contentHeightMm physical height of the SVG content
+     * @param offsetXMm     final X offset actually used (board auto-alignment + manual fine-tune)
+     * @param offsetYMm     final Y offset actually used (board auto-alignment + manual fine-tune)
+     * @param mirrorX       whether the rendered artwork was mirrored horizontally for this layer
+     * @param mirrorY       whether the rendered artwork was mirrored vertically for this layer
      */
     public record GCodeResult(
             String gcode,
             List<int[][]> outlineSegments,
             List<int[][]> fillSegments,
+            List<int[][]> borderSegments,
             int lineCount,
             long estimatedTimeSeconds,
             double fileSizeKb,
             int[] powerHistogram,
             int renderWidth,    // coordinate space of the segments
-            int renderHeight
+            int renderHeight,
+            double contentWidthMm,
+            double contentHeightMm,
+            double offsetXMm,
+            double offsetYMm,
+            boolean mirrorX,
+            boolean mirrorY
     ) {}
 
     /**
      * Generate GCODE for a single layer.
      * @param layer     the layer model
      * @param parseResult  parsed SVG data
+     * @param boardSettings  the project's board settings (size/margin/flip axis), used to
+     *                       auto-align front and back side layers; may be {@code null} to
+     *                       fall back to the layer's manual offset only
      * @param renderWidth  pixel width of rendered image
      * @param renderHeight pixel height of rendered image
      * @param progressCallback  optional callback (0-100)
@@ -53,6 +74,7 @@ public class GCodeGenerator {
     public static GCodeResult generate(
             Layer layer,
             SvgParser.SvgParseResult parseResult,
+            BoardSettings boardSettings,
             int renderWidth,
             int renderHeight,
             Consumer<Integer> progressCallback
@@ -64,17 +86,9 @@ public class GCodeGenerator {
         // Batik converts SVG units (mm, cm, pt …) to device pixels internally.
         // JTS geometries and renderToImage() both operate in this pixel space,
         // so we must use it as our common coordinate system.
-        Rectangle2D batikBounds = parseResult.graphicsNode().getBounds();
-        double batikW, batikH;
-        if (batikBounds != null && batikBounds.getWidth() > 0 && batikBounds.getHeight() > 0) {
-            batikW = batikBounds.getWidth();
-            batikH = batikBounds.getHeight();
-        } else {
-            // Fallback: SVG uses px units → Batik renders 1:1
-            batikW = parseResult.svgWidth();
-            batikH = parseResult.svgHeight();
-        }
-
+        SvgParser.ContentBounds contentBounds = SvgParser.getContentBounds(parseResult);
+        double batikW = contentBounds.widthPx();
+        double batikH = contentBounds.heightPx();
 
         // Scale Batik bounds to the requested render size, preserving aspect ratio.
         // This matches exactly what renderToImage() does, so there is NO centering
@@ -87,14 +101,37 @@ public class GCodeGenerator {
         if (progressCallback != null) progressCallback.accept(5);
         BufferedImage img = SvgParser.renderToImage(parseResult, actualW, actualH);
 
+        // ── 1b. Mirror back-side artwork, if requested ───────────────────────
+        // Many PCB/CAM tools export the back layer already mirrored; this is an
+        // opt-in toggle for projects whose back SVG is drawn as seen from the top.
+        boolean mirrorX = false, mirrorY = false;
+        if (boardSettings != null && layer.getSide() == LayerSide.BACK && boardSettings.isMirrorBackArtwork()) {
+            if (boardSettings.getFlipAxis() == FlipAxis.VERTICAL) mirrorX = true;
+            else mirrorY = true;
+        }
+        if (mirrorX || mirrorY) {
+            img = mirrorImage(img, mirrorX, mirrorY);
+        }
+
         // ── 2. Laser parameters in pixel space ───────────────────────────────
         // Physical size of the rendered content:
         //   Batik device pixel = 1/96 inch = 25.4/96 mm  →  1 mm = 96/25.4 ≈ 3.7795 Batik px
         // So: contentWidthMm = batikW / 3.7795  and  mmPerRenderPx = contentWidthMm / actualW
-        final double MM_PER_BATIK_PX = 25.4 / 96.0;
-        double contentWidthMm  = batikW * MM_PER_BATIK_PX;
-        double contentHeightMm = batikH * MM_PER_BATIK_PX;
+        double contentWidthMm  = contentBounds.widthMm();
+        double contentHeightMm = contentBounds.heightMm();
         double pxPerMm         = actualW / contentWidthMm;
+
+        // ── 2b. Final offset: board auto-alignment + per-layer manual fine-tune ──
+        double offsetXMm, offsetYMm;
+        if (boardSettings != null) {
+            BoardAlignmentService.Offset base = BoardAlignmentService.computeBaseOffset(
+                    boardSettings, layer.getSide(), contentWidthMm, contentHeightMm);
+            offsetXMm = base.xMm() + ls.getOffsetXMm();
+            offsetYMm = base.yMm() + ls.getOffsetYMm();
+        } else {
+            offsetXMm = ls.getOffsetXMm();
+            offsetYMm = ls.getOffsetYMm();
+        }
 
         int radiusXPx = (int) Math.round(ls.getRadiusXMm() * pxPerMm);
         int radiusYPx = (int) Math.round(ls.getRadiusYMm() * pxPerMm);
@@ -129,6 +166,11 @@ public class GCodeGenerator {
                 : List.of();
         if (progressCallback != null) progressCallback.accept(80);
 
+        // ── 5b. Border pass – exact SVG bounding box, one per side (Etch layer only) ──
+        boolean addBorder = boardSettings != null && boardSettings.isGenerateBorder()
+                && layer.getType() == LayerType.ETCH;
+        List<int[][]> borderSegs = addBorder ? buildBorderSegments(actualW, actualH) : List.of();
+
         // ── 6. Build GCODE string ────────────────────────────────────────────
         StringBuilder sb = new StringBuilder();
         sb.append("; PCB Laser Studio - Generated GCODE\n");
@@ -142,8 +184,8 @@ public class GCodeGenerator {
         sb.append(String.format(Locale.ENGLISH,
                 "; Feed: %d mm/min, Power: %.0f%%\n", feedRate, ls.getPowerPercent()));
         sb.append(String.format(Locale.ENGLISH,
-                "; Offset: X=%.3f mm, Y=%.3f mm (lower-left corner)\n\n",
-                ls.getOffsetXMm(), ls.getOffsetYMm()));
+                "; Offset: X=%.3f mm, Y=%.3f mm%s\n\n",
+                offsetXMm, offsetYMm, boardSettings != null ? " (board-aligned + manual fine-tune)" : ""));
 
         // Pre-GCODE
         if (layer.getGcodePrefix() != null && !layer.getGcodePrefix().isBlank()) {
@@ -158,7 +200,15 @@ public class GCodeGenerator {
                     ls.getRadiusXMm(), ls.getRadiusYMm()));
             appendSegments(sb, outlineSegs, contourFeedRate, contourPower,
                     contentWidthMm, contentHeightMm, actualW, actualH, true,
-                    ls.getOffsetXMm(), ls.getOffsetYMm());
+                    offsetXMm, offsetYMm);
+        }
+
+        // Border pass (exact SVG bounding box, reuses the contour pass settings)
+        if (!borderSegs.isEmpty()) {
+            sb.append("; ===== BORDER PASS (SVG bounding box) =====\n");
+            appendSegments(sb, borderSegs, contourFeedRate, contourPower,
+                    contentWidthMm, contentHeightMm, actualW, actualH, true,
+                    offsetXMm, offsetYMm);
         }
 
         // Fill / raster passes
@@ -166,7 +216,7 @@ public class GCodeGenerator {
             sb.append("; ===== FILL PASS =====\n");
             appendSegments(sb, fillSegs, feedRate, power,
                     contentWidthMm, contentHeightMm, actualW, actualH, false,
-                    ls.getOffsetXMm(), ls.getOffsetYMm());
+                    offsetXMm, offsetYMm);
         }
 
         // Post-GCODE
@@ -181,7 +231,7 @@ public class GCodeGenerator {
         int lineCount    = (int) gcode.lines().count();
         double fileSizeKb = gcode.length() / 1024.0;
 
-        long totalMoves  = fillSegs.size() + outlineSegs.size();
+        long totalMoves  = fillSegs.size() + outlineSegs.size() + borderSegs.size();
         long estSeconds  = totalMoves > 0 ? (totalMoves * 10L) / (feedRate / 60 + 1) : 0;
 
         int[] histogram  = new int[101];
@@ -190,9 +240,33 @@ public class GCodeGenerator {
         log.info("GCODE generated: {} lines, {} KB, ~{} s", lineCount,
                 String.format("%.1f", fileSizeKb), estSeconds);
 
-        return new GCodeResult(gcode, outlineSegs, fillSegs,
+        return new GCodeResult(gcode, outlineSegs, fillSegs, borderSegs,
                 lineCount, estSeconds, fileSizeKb, histogram,
-                actualW, actualH);
+                actualW, actualH, contentWidthMm, contentHeightMm,
+                offsetXMm, offsetYMm, mirrorX, mirrorY);
+    }
+
+    /** Mirrors a rendered image horizontally and/or vertically (for back-side artwork). */
+    private static BufferedImage mirrorImage(BufferedImage src, boolean mirrorX, boolean mirrorY) {
+        int w = src.getWidth(), h = src.getHeight();
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = out.createGraphics();
+        AffineTransform t = new AffineTransform();
+        if (mirrorX) { t.translate(w, 0); t.scale(-1, 1); }
+        if (mirrorY) { t.translate(0, h); t.scale(1, -1); }
+        g2.drawImage(src, t, null);
+        g2.dispose();
+        return out;
+    }
+
+    /** Rectangle matching the exact SVG bounding box, in render-pixel space. */
+    private static List<int[][]> buildBorderSegments(int w, int h) {
+        List<int[][]> segs = new ArrayList<>();
+        segs.add(new int[][]{{0, 0}, {w, 0}});
+        segs.add(new int[][]{{w, 0}, {w, h}});
+        segs.add(new int[][]{{w, h}, {0, h}});
+        segs.add(new int[][]{{0, h}, {0, 0}});
+        return segs;
     }
 
     // =================== Pixel analysis ===================
