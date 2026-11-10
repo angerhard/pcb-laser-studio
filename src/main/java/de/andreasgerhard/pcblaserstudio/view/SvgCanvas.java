@@ -154,8 +154,9 @@ public class SvgCanvas extends JPanel {
             }
             @Override public void mouseMoved(MouseEvent e) {
                 if (onStatusMessage != null && svgImage != null && parseResult != null) {
-                    double mmX = (e.getX() - panX) / zoom * (parseResult.svgWidth()  / svgImage.getWidth());
-                    double mmY = (e.getY() - panY) / zoom * (parseResult.svgHeight() / svgImage.getHeight());
+                    SvgParser.DocumentBounds bounds = SvgParser.getDocumentBounds(parseResult);
+                    double mmX = (e.getX() - panX) / zoom * (bounds.widthMm()  / svgImage.getWidth());
+                    double mmY = (e.getY() - panY) / zoom * (bounds.heightMm() / svgImage.getHeight());
                     onStatusMessage.accept(String.format("X: %.2f mm  Y: %.2f mm  Zoom: %.0f%%",
                             mmX, mmY, zoom * 100));
                 }
@@ -205,16 +206,16 @@ public class SvgCanvas extends JPanel {
             offsetYPx = 0;
             return;
         }
-        SvgParser.ContentBounds cb = SvgParser.getContentBounds(parseResult);
-        double pxPerMmX = svgImage.getWidth()  / cb.widthMm();
-        double pxPerMmY = svgImage.getHeight() / cb.heightMm();
+        SvgParser.DocumentBounds db = SvgParser.getDocumentBounds(parseResult);
+        double pxPerMmX = svgImage.getWidth()  / db.widthMm();
+        double pxPerMmY = svgImage.getHeight() / db.heightMm();
 
         boardWidthPx  = boardSettings.getWidthMm()  * pxPerMmX;
         boardHeightPx = boardSettings.getHeightMm() * pxPerMmY;
 
         LayerSide side  = layer != null ? layer.getSide() : LayerSide.FRONT;
         BoardAlignmentService.Offset base = BoardAlignmentService.computeBaseOffset(
-                boardSettings, side, cb.widthMm(), cb.heightMm());
+                boardSettings, side, db.widthMm(), db.heightMm());
         offsetXPx = base.xMm() * pxPerMmX;
         offsetYPx = base.yMm() * pxPerMmY;
 
@@ -382,20 +383,14 @@ public class SvgCanvas extends JPanel {
 
     /**
      * Renders the SVG at the given max pixel size.
-     * Dimensions are derived from {@code graphicsNode.getBounds()} (the actual Batik
-     * content bounds), which is the same basis used by renderToImage() and by
-     * GCodeGenerator – so all coordinate spaces stay consistent.
+     * Dimensions are derived from the declared document canvas, which is the
+     * same basis used by renderToImage() and by GCodeGenerator – so all
+     * coordinate spaces stay consistent.
      */
     private static BufferedImage renderAtSize(SvgParser.SvgParseResult result, int maxSize) {
-        java.awt.geom.Rectangle2D bounds = result.graphicsNode().getBounds();
-        double bW, bH;
-        if (bounds != null && bounds.getWidth() > 0 && bounds.getHeight() > 0) {
-            bW = bounds.getWidth();
-            bH = bounds.getHeight();
-        } else {
-            bW = Math.max(100, result.svgWidth());
-            bH = Math.max(100, result.svgHeight());
-        }
+        SvgParser.DocumentBounds bounds = SvgParser.getDocumentBounds(result);
+        double bW = Math.max(1, bounds.widthPx());
+        double bH = Math.max(1, bounds.heightPx());
         double s = (double) maxSize / Math.max(bW, bH);
         int w = (int) Math.max(1, Math.round(bW * s));
         int h = (int) Math.max(1, Math.round(bH * s));

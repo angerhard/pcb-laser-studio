@@ -16,6 +16,7 @@ import org.w3c.dom.Document;
 
 import java.awt.*;
 import java.awt.geom.AffineTransform;
+import java.awt.geom.Dimension2D;
 import java.awt.geom.PathIterator;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
@@ -24,6 +25,9 @@ import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Parses SVG data into a renderable Batik GraphicsNode and JTS geometries.
@@ -39,36 +43,43 @@ public class SvgParser {
     public record SvgParseResult(
             GraphicsNode graphicsNode,
             Document document,
+            /** Declared document viewport width in Batik device pixels. */
             double svgWidth,
+            /** Declared document viewport height in Batik device pixels. */
             double svgHeight,
             List<Geometry> geometries
     ) {}
 
     /**
-     * Actual rendered content bounds of a parsed SVG, in both Batik device
-     * pixels and physical millimetres. This is the single source of truth
-     * used by {@link de.andreasgerhard.pcblaserstudio.service.GCodeGenerator}
+     * Declared SVG document canvas (the root {@code <svg>} viewport), in both
+     * Batik device pixels and physical millimetres. This is the single source
+     * of truth used by {@link de.andreasgerhard.pcblaserstudio.service.GCodeGenerator}
      * and the board-alignment logic, so every consumer agrees on the exact
-     * physical size of the content.
+     * physical size and origin of the SVG canvas.
      */
-    public record ContentBounds(double widthPx, double heightPx, double widthMm, double heightMm) {}
+    public record DocumentBounds(double widthPx, double heightPx, double widthMm, double heightMm) {}
 
     /**
-     * Returns the actual rendering bounds of the parsed SVG content.
-     * Falls back to the declared {@code svgWidth}/{@code svgHeight} attributes
-     * when Batik can't report bounds (e.g. empty document).
+     * Returns the declared document canvas of a parsed SVG. This is based on
+     * the root {@code <svg>} width/height (or, if absent, the viewBox/content
+     * bounds), not on the artwork's ink bounding box.
      */
-    public static ContentBounds getContentBounds(SvgParseResult result) {
-        Rectangle2D bounds = result.graphicsNode().getBounds();
-        double w, h;
-        if (bounds != null && bounds.getWidth() > 0 && bounds.getHeight() > 0) {
-            w = bounds.getWidth();
-            h = bounds.getHeight();
-        } else {
-            w = result.svgWidth();
-            h = result.svgHeight();
+    public static DocumentBounds getDocumentBounds(SvgParseResult result) {
+        double w = result.svgWidth();
+        double h = result.svgHeight();
+        if (!isPositiveFinite(w) || !isPositiveFinite(h)) {
+            Rectangle2D bounds = result.graphicsNode().getBounds();
+            if (bounds != null && isPositiveFinite(bounds.getWidth())
+                    && isPositiveFinite(bounds.getHeight())) {
+                w = bounds.getWidth();
+                h = bounds.getHeight();
+            }
         }
-        return new ContentBounds(w, h, w * MM_PER_BATIK_PX, h * MM_PER_BATIK_PX);
+        if (!isPositiveFinite(w) || !isPositiveFinite(h)) {
+            w = 800;
+            h = 600;
+        }
+        return new DocumentBounds(w, h, w * MM_PER_BATIK_PX, h * MM_PER_BATIK_PX);
     }
 
     /**
@@ -111,27 +122,75 @@ public class SvgParser {
         GVTBuilder builder = new GVTBuilder();
         GraphicsNode rootNode = builder.build(ctx, doc);
 
-        // Get SVG dimensions
         org.w3c.dom.Element svgEl = doc.getDocumentElement();
-        double width = parseDimension(svgEl.getAttribute("width"), 800);
-        double height = parseDimension(svgEl.getAttribute("height"), 600);
+        double attrWidth  = parseLength(svgEl.getAttribute("width"),  Double.NaN);
+        double attrHeight = parseLength(svgEl.getAttribute("height"), Double.NaN);
 
-        // Try viewBox if width/height missing
+        // viewBox fallback dimensions (SVG user units → device px).
+        double vbWidth = Double.NaN, vbHeight = Double.NaN;
         String viewBox = svgEl.getAttribute("viewBox");
-        if (width == 800 && height == 600 && viewBox != null && !viewBox.isEmpty()) {
+        if (viewBox != null && !viewBox.isBlank()) {
             String[] vb = viewBox.trim().split("[\\s,]+");
             if (vb.length == 4) {
-                width = Double.parseDouble(vb[2]);
-                height = Double.parseDouble(vb[3]);
+                vbWidth  = parseNumber(vb[2], Double.NaN);
+                vbHeight = parseNumber(vb[3], Double.NaN);
             }
         }
+
+        // The declared document viewport is the physical canvas size. Batik has
+        // already converted physical units (mm, cm, in, pt …) to device pixels.
+        Dimension2D docSize = ctx.getDocumentSize();
+        double docWidth  = docSize != null ? docSize.getWidth()  : Double.NaN;
+        double docHeight = docSize != null ? docSize.getHeight() : Double.NaN;
+
+        double width, height;
+        if (isPositiveFinite(attrWidth) && isPositiveFinite(attrHeight)) {
+            // Both root dimensions are absolute → trust Batik's converted viewport.
+            width  = isPositiveFinite(docWidth)  ? docWidth  : attrWidth;
+            height = isPositiveFinite(docHeight) ? docHeight : attrHeight;
+        } else if (isPositiveFinite(vbWidth) && isPositiveFinite(vbHeight)) {
+            // Missing/percentage dimensions → the viewBox defines the canvas.
+            width  = vbWidth;
+            height = vbHeight;
+        } else if (isPositiveFinite(docWidth) && isPositiveFinite(docHeight)
+                && docWidth > 1.0 && docHeight > 1.0) {
+            width  = docWidth;
+            height = docHeight;
+        } else {
+            width  = Double.NaN;
+            height = Double.NaN;
+        }
+
+        // Fill any remaining gaps from individual attributes / viewBox / artwork.
+        if (!isPositiveFinite(width))  width  = attrWidth;
+        if (!isPositiveFinite(height)) height = attrHeight;
+        if (!isPositiveFinite(width) && isPositiveFinite(vbWidth))   width  = vbWidth;
+        if (!isPositiveFinite(height) && isPositiveFinite(vbHeight)) height = vbHeight;
+        if (!isPositiveFinite(width) || !isPositiveFinite(height)) {
+            Rectangle2D contentBounds = rootNode.getBounds();
+            if (contentBounds != null) {
+                if (!isPositiveFinite(width) && isPositiveFinite(contentBounds.getWidth())) {
+                    width = contentBounds.getWidth();
+                }
+                if (!isPositiveFinite(height) && isPositiveFinite(contentBounds.getHeight())) {
+                    height = contentBounds.getHeight();
+                }
+            }
+        }
+        if (!isPositiveFinite(width))  width = 800;
+        if (!isPositiveFinite(height)) height = 600;
 
         List<Geometry> geometries = extractGeometries(rootNode);
         return new SvgParseResult(rootNode, doc, width, height, geometries);
     }
 
     /**
-     * Render the parsed SVG to a BufferedImage.
+     * Render the parsed SVG document canvas to a BufferedImage.
+     *
+     * <p>The full root {@code <svg>} viewport is rendered, preserving each
+     * element's position inside the canvas. Content outside the viewport is
+     * clipped. This keeps the physical size and origin identical across SVGs
+     * that declare the same width/height, even when their artwork bounds differ.</p>
      */
     public static BufferedImage renderToImage(SvgParseResult result, int targetWidth, int targetHeight) {
         BufferedImage img = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_ARGB);
@@ -140,37 +199,12 @@ public class SvgParser {
         g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         // Leave background transparent (TYPE_INT_ARGB) – the canvas draws its own background.
 
-        // Use the actual rendering bounds from the Batik graphicsNode.
-        // This is essential for SVGs that use physical units (mm, cm, pt, in),
-        // because Batik converts those to device pixels internally (at ~96 dpi).
-        // Using svgWidth/svgHeight directly (e.g. 210 for "210mm") would result
-        // in a scale factor that is ~3.78× too large, showing only a small portion.
-        Rectangle2D bounds = result.graphicsNode().getBounds();
-        double nodeW, nodeH, nodeX, nodeY;
-        if (bounds != null && bounds.getWidth() > 0 && bounds.getHeight() > 0) {
-            nodeW = bounds.getWidth();
-            nodeH = bounds.getHeight();
-            nodeX = bounds.getX();
-            nodeY = bounds.getY();
-        } else {
-            // Fallback: SVG uses px units → Batik renders 1:1 with attribute values
-            nodeW = result.svgWidth();
-            nodeH = result.svgHeight();
-            nodeX = 0;
-            nodeY = 0;
-        }
+        DocumentBounds bounds = getDocumentBounds(result);
+        double scaleX = targetWidth  / bounds.widthPx();
+        double scaleY = targetHeight / bounds.heightPx();
 
-        // Scale to fit the target dimensions while preserving aspect ratio
-        double scaleX = targetWidth / nodeW;
-        double scaleY = targetHeight / nodeH;
-        double scale  = Math.min(scaleX, scaleY);
-
-        // Centre the content and offset by the node's own origin
-        double tx = (targetWidth  - nodeW * scale) / 2.0 - nodeX * scale;
-        double ty = (targetHeight - nodeH * scale) / 2.0 - nodeY * scale;
-
-        g2d.translate(tx, ty);
-        g2d.scale(scale, scale);
+        g2d.scale(scaleX, scaleY);
+        g2d.clip(new Rectangle2D.Double(0, 0, bounds.widthPx(), bounds.heightPx()));
         result.graphicsNode().paint(g2d);
         g2d.dispose();
         return img;
@@ -272,15 +306,41 @@ public class SvgParser {
         }
     }
 
-    private static double parseDimension(String val, double defaultVal) {
-        if (val == null || val.isEmpty()) return defaultVal;
+    private static final Pattern LENGTH_PATTERN = Pattern.compile(
+            "^([-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:[eE][-+]?\\d+)?)\\s*([a-zA-Z%]*)$");
+
+    /**
+     * Parses an SVG length into Batik device pixels (1 px = 1/96 inch).
+     * Percentage/em/ex units cannot be resolved here and fall back to
+     * {@code defaultVal}.
+     */
+    private static double parseLength(String val, double defaultVal) {
+        if (val == null || val.isBlank()) return defaultVal;
+        Matcher m = LENGTH_PATTERN.matcher(val.trim().toLowerCase(Locale.ROOT));
+        if (!m.matches()) return defaultVal;
+        double number = parseNumber(m.group(1), Double.NaN);
+        if (!isPositiveFinite(number)) return defaultVal;
+        return switch (m.group(2)) {
+            case "", "px" -> number;
+            case "mm" -> number * 96.0 / 25.4;
+            case "cm" -> number * 96.0 / 2.54;
+            case "in" -> number * 96.0;
+            case "pt" -> number * 96.0 / 72.0;
+            case "pc" -> number * 16.0;
+            default -> defaultVal;
+        };
+    }
+
+    private static double parseNumber(String val, double defaultVal) {
         try {
-            // Strip units (px, mm, pt, etc.)
-            val = val.replaceAll("[^0-9.]", "");
-            return Double.parseDouble(val);
+            return Double.parseDouble(val.trim());
         } catch (NumberFormatException e) {
             return defaultVal;
         }
+    }
+
+    private static boolean isPositiveFinite(double value) {
+        return Double.isFinite(value) && value > 0;
     }
 }
 

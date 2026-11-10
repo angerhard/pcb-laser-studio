@@ -42,7 +42,7 @@ public class GCodeGenerationPanel extends JPanel {
 
         // Generate buttons
         btnGenerateActive = DarkTheme.createAccentButton("Generate Active", "Generate GCODE for the current layer");
-        btnGenerateActive.setIcon(Icons.of(Icons.SLIDERS, 13, Color.WHITE));
+        btnGenerateActive.setIcon(Icons.of(Icons.PLAY, 13, Color.WHITE));
         btnGenerateAll    = DarkTheme.createButton("Generate All", "Generate GCODE for all enabled layers");
         btnGenerateAll.setIcon(Icons.of(Icons.LAYERS, 13));
         add(btnGenerateActive, "split 2, w 46%, h 24!, wmax 190");

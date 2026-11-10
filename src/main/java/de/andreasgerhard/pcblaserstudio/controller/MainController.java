@@ -223,8 +223,9 @@ public class MainController {
                     tab.gcodeCanvas.clearGcodeResult();
                     tab.toolPanel.updateGcodeStats(null);
 
-                    window.setStatus(String.format("SVG loaded: %s  (%.0f × %.0f px)",
-                            file.getName(), result.svgWidth(), result.svgHeight()));
+                    SvgParser.DocumentBounds bounds = SvgParser.getDocumentBounds(result);
+                    window.setStatus(String.format("SVG loaded: %s  (%.2f × %.2f mm)",
+                            file.getName(), bounds.widthMm(), bounds.heightMm()));
                     window.updateTitle(project);
                     window.refreshTabHeaders();
                     if (boardSettingsDialog != null && boardSettingsDialog.isDisplayable()) {

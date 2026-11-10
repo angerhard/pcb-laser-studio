@@ -205,7 +205,7 @@ public class MainWindow extends JFrame {
         menuExportProject = darkItem("Export Project…",        null);
         menuSendToLaser   = darkItem("Send to Laser…",         "Ctrl+L");
 
-        menuGenActive.setIcon(Icons.of(Icons.SLIDERS, 13));
+        menuGenActive.setIcon(Icons.of(Icons.PLAY, 13));
         menuGenAll.setIcon(Icons.of(Icons.LAYERS, 13));
         menuExportGcode.setIcon(Icons.of(Icons.DOWNLOAD, 13));
         menuExportProject.setIcon(Icons.of(Icons.SAVE, 13));

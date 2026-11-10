@@ -66,19 +66,19 @@ public class BoardAlignmentService {
                                                     Map<String, SvgParser.SvgParseResult> parseCache) {
         List<String> warnings = new ArrayList<>();
 
-        Map<LayerSide, Map<LayerType, SvgParser.ContentBounds>> bySideType = new EnumMap<>(LayerSide.class);
+        Map<LayerSide, Map<LayerType, SvgParser.DocumentBounds>> bySideType = new EnumMap<>(LayerSide.class);
         for (Layer layer : project.getLayers()) {
             SvgParser.SvgParseResult pr = parseCache.get(layer.getId());
             if (pr == null) continue;
             bySideType.computeIfAbsent(layer.getSide(), s -> new EnumMap<>(LayerType.class))
-                    .put(layer.getType(), SvgParser.getContentBounds(pr));
+                    .put(layer.getType(), SvgParser.getDocumentBounds(pr));
         }
 
         for (LayerSide side : LayerSide.values()) {
-            Map<LayerType, SvgParser.ContentBounds> m = bySideType.get(side);
+            Map<LayerType, SvgParser.DocumentBounds> m = bySideType.get(side);
             if (m == null) continue;
-            SvgParser.ContentBounds etch = m.get(LayerType.ETCH);
-            SvgParser.ContentBounds doc = m.get(LayerType.DOCUMENTATION);
+            SvgParser.DocumentBounds etch = m.get(LayerType.ETCH);
+            SvgParser.DocumentBounds doc = m.get(LayerType.DOCUMENTATION);
             if (etch != null && doc != null && !sizesMatch(etch, doc)) {
                 warnings.add(String.format(Locale.ENGLISH,
                         "%s: Etch (%.2f×%.2f mm) and Documentation (%.2f×%.2f mm) SVG sizes differ.",
@@ -86,8 +86,8 @@ public class BoardAlignmentService {
             }
         }
 
-        SvgParser.ContentBounds front = preferEtch(bySideType.get(LayerSide.FRONT));
-        SvgParser.ContentBounds back = preferEtch(bySideType.get(LayerSide.BACK));
+        SvgParser.DocumentBounds front = preferEtch(bySideType.get(LayerSide.FRONT));
+        SvgParser.DocumentBounds back = preferEtch(bySideType.get(LayerSide.BACK));
         if (front != null && back != null && !sizesMatch(front, back)) {
             warnings.add(String.format(Locale.ENGLISH,
                     "Front (%.2f×%.2f mm) and Back (%.2f×%.2f mm) SVG sizes differ — " +
@@ -98,13 +98,13 @@ public class BoardAlignmentService {
         return warnings;
     }
 
-    private static SvgParser.ContentBounds preferEtch(Map<LayerType, SvgParser.ContentBounds> m) {
+    private static SvgParser.DocumentBounds preferEtch(Map<LayerType, SvgParser.DocumentBounds> m) {
         if (m == null) return null;
-        SvgParser.ContentBounds etch = m.get(LayerType.ETCH);
+        SvgParser.DocumentBounds etch = m.get(LayerType.ETCH);
         return etch != null ? etch : m.get(LayerType.DOCUMENTATION);
     }
 
-    private static boolean sizesMatch(SvgParser.ContentBounds a, SvgParser.ContentBounds b) {
+    private static boolean sizesMatch(SvgParser.DocumentBounds a, SvgParser.DocumentBounds b) {
         return Math.abs(a.widthMm() - b.widthMm()) <= DEFAULT_TOLERANCE_MM
                 && Math.abs(a.heightMm() - b.heightMm()) <= DEFAULT_TOLERANCE_MM;
     }

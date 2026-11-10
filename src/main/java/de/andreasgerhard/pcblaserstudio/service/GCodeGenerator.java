@@ -34,8 +34,8 @@ public class GCodeGenerator {
      * @param renderWidth   pixel width used for the analysis image and segment coordinates
      * @param renderHeight  pixel height used for the analysis image and segment coordinates
      * @param borderSegments  board-border pass segments (exact SVG bounding box), empty if disabled
-     * @param contentWidthMm  physical width of the SVG content (same coordinate space as segments)
-     * @param contentHeightMm physical height of the SVG content
+     * @param contentWidthMm  physical width of the SVG canvas (same coordinate space as segments)
+     * @param contentHeightMm physical height of the SVG canvas
      * @param offsetXMm     final X offset actually used (board position + margin-based anchor)
      * @param offsetYMm     final Y offset actually used (board position + margin-based anchor)
      * @param mirrorX       whether the rendered artwork was mirrored horizontally for this layer
@@ -82,21 +82,22 @@ public class GCodeGenerator {
         LaserSettings ls = layer.getLaserSettings();
         boolean engraveBlack = layer.getProcessingMode() == ProcessingMode.BLACK_AREA;
 
-        // ── 1. Determine the Batik rendering bounds ──────────────────────────
-        // Batik converts SVG units (mm, cm, pt …) to device pixels internally.
-        // JTS geometries and renderToImage() both operate in this pixel space,
-        // so we must use it as our common coordinate system.
-        SvgParser.ContentBounds contentBounds = SvgParser.getContentBounds(parseResult);
-        double batikW = contentBounds.widthPx();
-        double batikH = contentBounds.heightPx();
+        // ── 1. Determine the SVG document canvas ─────────────────────────────
+        // The physical size/origin comes from the root <svg> width/height, not
+        // from the artwork's ink bounding box. Batik converts SVG units (mm, cm,
+        // pt …) to device pixels internally, so this is our common coordinate
+        // system for the rendered image and G-code mapping.
+        SvgParser.DocumentBounds documentBounds = SvgParser.getDocumentBounds(parseResult);
+        double canvasW = documentBounds.widthPx();
+        double canvasH = documentBounds.heightPx();
 
-        // Scale Batik bounds to the requested render size, preserving aspect ratio.
-        // This matches exactly what renderToImage() does, so there is NO centering
-        // offset and coordinates in the analysis image map 1:1 to segment coordinates.
-        double batikScale = Math.min((double) renderWidth / batikW,
-                                     (double) renderHeight / batikH);
-        int actualW = Math.max(1, (int) Math.round(batikW * batikScale));
-        int actualH = Math.max(1, (int) Math.round(batikH * batikScale));
+        // Scale the document canvas to the requested render size, preserving its
+        // aspect ratio. renderToImage() renders the full canvas at this size, so
+        // image coordinates map 1:1 to segment coordinates.
+        double canvasScale = Math.min((double) renderWidth / canvasW,
+                                      (double) renderHeight / canvasH);
+        int actualW = Math.max(1, (int) Math.round(canvasW * canvasScale));
+        int actualH = Math.max(1, (int) Math.round(canvasH * canvasScale));
 
         if (progressCallback != null) progressCallback.accept(5);
         BufferedImage img = SvgParser.renderToImage(parseResult, actualW, actualH);
@@ -114,11 +115,11 @@ public class GCodeGenerator {
         }
 
         // ── 2. Laser parameters in pixel space ───────────────────────────────
-        // Physical size of the rendered content:
+        // Physical size of the SVG canvas:
         //   Batik device pixel = 1/96 inch = 25.4/96 mm  →  1 mm = 96/25.4 ≈ 3.7795 Batik px
-        // So: contentWidthMm = batikW / 3.7795  and  mmPerRenderPx = contentWidthMm / actualW
-        double contentWidthMm  = contentBounds.widthMm();
-        double contentHeightMm = contentBounds.heightMm();
+        // So: contentWidthMm = canvasW / 3.7795  and  mmPerRenderPx = contentWidthMm / actualW
+        double contentWidthMm  = documentBounds.widthMm();
+        double contentHeightMm = documentBounds.heightMm();
         double pxPerMm         = actualW / contentWidthMm;
 
         // ── 2b. Final offset: board position + margin-based anchor ──────────
@@ -177,7 +178,7 @@ public class GCodeGenerator {
         sb.append("; Layer: ").append(layer.getName()).append("\n");
         sb.append("; Mode: ").append(layer.getProcessingMode().getDisplayName()).append("\n");
         sb.append(String.format(Locale.ENGLISH,
-                "; Content size: %.3f x %.3f mm\n", contentWidthMm, contentHeightMm));
+                "; SVG canvas size: %.3f x %.3f mm\n", contentWidthMm, contentHeightMm));
         sb.append(String.format(Locale.ENGLISH,
                 "; Radius: X=%.3f mm, Y=%.3f mm, Stepover: %.3f mm\n",
                 ls.getRadiusXMm(), ls.getRadiusYMm(), ls.getStepoverMm()));
