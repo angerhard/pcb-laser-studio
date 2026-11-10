@@ -20,6 +20,7 @@ public class GCodeGenerationPanel extends JPanel {
         void onExportGcode();
         void onExportProject();
         void onSendToLaser();
+        void onCutBoard();
     }
 
     private final JProgressBar progressBar;
@@ -31,6 +32,7 @@ public class GCodeGenerationPanel extends JPanel {
     private final JButton btnExportGcode;
     private final JButton btnExportProject;
     private final JButton btnSendToLaser;
+    private final JButton btnCutBoard;
 
     private GenerateCallback callback;
 
@@ -111,6 +113,13 @@ public class GCodeGenerationPanel extends JPanel {
         btnSendToLaser.setEnabled(false);
         add(btnSendToLaser, "growx, h 24!, wrap");
 
+        // Cut out the board along the existing SVG border
+        btnCutBoard = DarkTheme.createButton("Cut Out Board…",
+                "Cut along the SVG border (only available on Etch tabs)");
+        btnCutBoard.setIcon(Icons.of(Icons.STOP, 13));
+        btnCutBoard.setEnabled(false);
+        add(btnCutBoard, "growx, h 24!, wrap");
+
         // Expose zoom buttons via action commands (controller wires them via name lookup)
         btnFit.setActionCommand("zoom.fit");
         btnZIn.setActionCommand("zoom.in");
@@ -135,11 +144,17 @@ public class GCodeGenerationPanel extends JPanel {
         btnExportGcode.addActionListener(e -> { if (callback != null) callback.onExportGcode(); });
         btnExportProject.addActionListener(e -> { if (callback != null) callback.onExportProject(); });
         btnSendToLaser.addActionListener(e -> { if (callback != null) callback.onSendToLaser(); });
+        btnCutBoard.addActionListener(e -> { if (callback != null) callback.onCutBoard(); });
     }
 
     // =================== Wiring from controller ===================
 
     public void setCallback(GenerateCallback cb) { this.callback = cb; }
+
+    /** Enables/disables the board-cut action (only valid on Etch layers). */
+    public void setCutEnabled(boolean enabled) {
+        btnCutBoard.setEnabled(enabled);
+    }
 
     public void setProgress(int value, String text) {
         SwingUtilities.invokeLater(() -> {

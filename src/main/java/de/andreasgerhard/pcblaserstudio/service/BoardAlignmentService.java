@@ -30,6 +30,9 @@ public class BoardAlignmentService {
 
     public record Offset(double xMm, double yMm) {}
 
+    /** An axis-aligned rectangle in machine coordinates (lower-left origin). */
+    public record Rect(double xMm, double yMm, double widthMm, double heightMm) {}
+
     private BoardAlignmentService() {}
 
     /**
@@ -87,6 +90,16 @@ public class BoardAlignmentService {
                                                        double contentWidthMm, double contentHeightMm) {
         Offset lowerLeft = computeBaseOffset(board, side, contentWidthMm, contentHeightMm);
         return toBoardTopLeft(board, lowerLeft.xMm(), lowerLeft.yMm(), contentHeightMm);
+    }
+
+    /**
+     * Returns the rectangle covered by the existing SVG-border pass: the SVG
+     * canvas placed on the board for the given side, in machine coordinates.
+     */
+    public static Rect computeSvgBorderRect(BoardSettings board, LayerSide side,
+                                            double contentWidthMm, double contentHeightMm) {
+        Offset lowerLeft = computeBaseOffset(board, side, contentWidthMm, contentHeightMm);
+        return new Rect(lowerLeft.xMm(), lowerLeft.yMm(), contentWidthMm, contentHeightMm);
     }
 
     /**

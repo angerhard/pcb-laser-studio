@@ -90,4 +90,43 @@ class BoardAlignmentServiceTest {
         assertEquals(5.0, o.xMm(), EPS);
         assertEquals(5.0, o.yMm(), EPS);
     }
+
+    @Test
+    void svgBorderRectMatchesFrontBorderPass() {
+        BoardAlignmentService.Rect r =
+                BoardAlignmentService.computeSvgBorderRect(
+                        board(), LayerSide.FRONT, 50.0, 40.0);
+
+        assertEquals(15.0, r.xMm(), EPS);
+        assertEquals(25.0, r.yMm(), EPS);
+        assertEquals(50.0, r.widthMm(), EPS);
+        assertEquals(40.0, r.heightMm(), EPS);
+    }
+
+    @Test
+    void svgBorderRectIsMirroredForBackVerticalFlip() {
+        BoardAlignmentService.Rect r =
+                BoardAlignmentService.computeSvgBorderRect(
+                        board(), LayerSide.BACK, 50.0, 40.0);
+
+        assertEquals(55.0, r.xMm(), EPS);
+        assertEquals(25.0, r.yMm(), EPS);
+        assertEquals(50.0, r.widthMm(), EPS);
+        assertEquals(40.0, r.heightMm(), EPS);
+    }
+
+    @Test
+    void svgBorderRectIsMirroredForBackHorizontalFlip() {
+        BoardSettings b = board();
+        b.setFlipAxis(FlipAxis.HORIZONTAL);
+
+        BoardAlignmentService.Rect r =
+                BoardAlignmentService.computeSvgBorderRect(
+                        b, LayerSide.BACK, 50.0, 40.0);
+
+        assertEquals(15.0, r.xMm(), EPS);
+        assertEquals(55.0, r.yMm(), EPS);
+        assertEquals(50.0, r.widthMm(), EPS);
+        assertEquals(40.0, r.heightMm(), EPS);
+    }
 }

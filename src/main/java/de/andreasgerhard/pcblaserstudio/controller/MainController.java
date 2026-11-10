@@ -2,15 +2,19 @@ package de.andreasgerhard.pcblaserstudio.controller;
 
 import de.andreasgerhard.pcblaserstudio.model.BoardSettings;
 import de.andreasgerhard.pcblaserstudio.model.ConnectionSettings;
+import de.andreasgerhard.pcblaserstudio.model.CutSettings;
 import de.andreasgerhard.pcblaserstudio.model.Layer;
+import de.andreasgerhard.pcblaserstudio.model.LayerType;
 import de.andreasgerhard.pcblaserstudio.model.Project;
 import de.andreasgerhard.pcblaserstudio.service.BoardAlignmentService;
+import de.andreasgerhard.pcblaserstudio.service.BoardCutService;
 import de.andreasgerhard.pcblaserstudio.service.GCodeGenerator;
 import de.andreasgerhard.pcblaserstudio.service.PreferencesService;
 import de.andreasgerhard.pcblaserstudio.service.ProjectSerializer;
 import de.andreasgerhard.pcblaserstudio.service.SvgParser;
 import de.andreasgerhard.pcblaserstudio.view.LayerTab;
 import de.andreasgerhard.pcblaserstudio.view.MainWindow;
+import de.andreasgerhard.pcblaserstudio.view.dialogs.BoardCutDialog;
 import de.andreasgerhard.pcblaserstudio.view.dialogs.BoardSettingsDialog;
 import de.andreasgerhard.pcblaserstudio.view.dialogs.LaserControlDialog;
 import de.andreasgerhard.pcblaserstudio.view.panels.GCodeGenerationPanel;
@@ -25,6 +29,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -81,6 +86,7 @@ public class MainController {
         window.menuExportGcode.addActionListener(e -> onExportGcode());
         window.menuExportProject.addActionListener(e -> onSaveProject(true));
         window.menuSendToLaser.addActionListener(e -> onSendToLaser());
+        window.menuCutBoard.addActionListener(e -> onCutBoard());
         window.menuBoardSettings.addActionListener(e -> onBoardSettings());
         window.menuAbout.addActionListener(e -> onAbout());
     }
@@ -103,8 +109,16 @@ public class MainController {
         LayerTab active = window.getActiveTab();
         if (active == null) return;
 
+        // Cut-out is only available for Etch layers; Documentation tabs disable it.
+        boolean canCut = LayerType.ETCH.equals(active.getLayer().getType());
+        window.menuCutBoard.setEnabled(canCut);
+        active.toolPanel.gcodeGenerationPanel.setCutEnabled(canCut);
+
         // Layer settings changes → refresh tab header (side changes affect board alignment)
         active.toolPanel.layerSettingsPanel.setOnChange(layer -> {
+            boolean enabled = LayerType.ETCH.equals(layer.getType());
+            window.menuCutBoard.setEnabled(enabled);
+            active.toolPanel.gcodeGenerationPanel.setCutEnabled(enabled);
             window.refreshTabHeaders();
             window.updateTitle(project);
             active.svgCanvas.refreshAlignment();
@@ -152,6 +166,7 @@ public class MainController {
             @Override public void onExportGcode()     { MainController.this.onExportGcode(); }
             @Override public void onExportProject()   { onSaveProject(true); }
             @Override public void onSendToLaser()     { MainController.this.onSendToLaser(); }
+            @Override public void onCutBoard()        { MainController.this.onCutBoard(); }
         });
 
         // Zoom controls: find named buttons inside the panel
@@ -380,6 +395,82 @@ public class MainController {
         laserDialog.setVisible(true);
         laserDialog.toFront();
         window.setStatus("Send to laser: " + tab.getLayer().getName());
+    }
+
+    // =================== Board cut-out ===================
+
+    private void onCutBoard() {
+        LayerTab tab = window.getActiveTab();
+        if (tab == null) return;
+
+        Layer layer = tab.getLayer();
+        if (!LayerType.ETCH.equals(layer.getType())) {
+            JOptionPane.showMessageDialog(window,
+                    "Select the Front or Back Etch tab whose border you want to cut.",
+                    "Cut Out Board", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        SvgParser.SvgParseResult parseResult = parseCache.get(layer.getId());
+        if (parseResult == null) {
+            JOptionPane.showMessageDialog(window,
+                    "Load an SVG for the active Etch layer first.",
+                    "No SVG", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        if (laserDialog != null && laserDialog.isJobRunning()) {
+            JOptionPane.showMessageDialog(window,
+                    "A laser job is already running. Stop it before starting a cut.",
+                    "Laser Busy", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        SvgParser.DocumentBounds bounds = SvgParser.getDocumentBounds(parseResult);
+        BoardAlignmentService.Rect rect = BoardAlignmentService.computeSvgBorderRect(
+                project.getBoardSettings(), layer.getSide(),
+                bounds.widthMm(), bounds.heightMm());
+
+        CutSettings cut = project.getCutSettings();
+        if (cut == null) {
+            cut = new CutSettings();
+            project.setCutSettings(cut);
+        }
+
+        String rectangleText = String.format(Locale.ENGLISH,
+                "%.2f × %.2f mm at X=%.2f, Y=%.2f mm (lower-left)",
+                rect.widthMm(), rect.heightMm(), rect.xMm(), rect.yMm());
+
+        BoardCutDialog cutDialog = new BoardCutDialog(
+                window, layer.getName(), rectangleText, cut);
+        if (!cutDialog.showDialog()) return;
+
+        cut.setPowerPercent(cutDialog.getPowerPercent());
+        cut.setFeedRateMmPerMin(cutDialog.getFeedRateMmPerMin());
+        cut.setRepeats(cutDialog.getRepeats());
+
+        layer.setDirty(true);
+        window.updateTitle(project);
+        window.refreshTabHeaders();
+
+        BoardCutService.CutResult result = BoardCutService.generate(
+                project.getBoardSettings(), layer.getSide(),
+                bounds.widthMm(), bounds.heightMm(),
+                cut, layer.getGcodePrefix(), layer.getGcodeSuffix());
+
+        if (connectionSettings == null) connectionSettings = preferencesService.load();
+        if (laserDialog == null || !laserDialog.isDisplayable()) {
+            laserDialog = new LaserControlDialog(window, connectionSettings, preferencesService);
+        }
+
+        laserDialog.setJob("Board cutout · " + layer.getName(),
+                result.gcode(), result.estimatedTimeSeconds(), true);
+        laserDialog.setVisible(true);
+        laserDialog.toFront();
+
+        window.setStatus(String.format(Locale.ENGLISH,
+                "Cut job ready: %s (%.2f × %.2f mm, %d passes)",
+                layer.getName(), rect.widthMm(), rect.heightMm(), cut.getRepeats()));
     }
 
     // =================== Board settings ===================

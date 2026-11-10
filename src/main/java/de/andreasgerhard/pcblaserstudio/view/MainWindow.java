@@ -33,6 +33,7 @@ public class MainWindow extends JFrame {
     public JMenuItem menuOpenSvg, menuClearSvg;
     public JMenuItem menuGenAll, menuGenActive, menuExportGcode, menuExportProject;
     public JMenuItem menuSendToLaser;
+    public JMenuItem menuCutBoard;
     public JMenuItem menuBoardSettings;
     public JMenuItem menuAbout;
 
@@ -204,12 +205,14 @@ public class MainWindow extends JFrame {
         menuExportGcode   = darkItem("Export GCODE…",          "Ctrl+E");
         menuExportProject = darkItem("Export Project…",        null);
         menuSendToLaser   = darkItem("Send to Laser…",         "Ctrl+L");
+        menuCutBoard      = darkItem("Cut Out Board…",         null);
 
         menuGenActive.setIcon(Icons.of(Icons.PLAY, 13));
         menuGenAll.setIcon(Icons.of(Icons.LAYERS, 13));
         menuExportGcode.setIcon(Icons.of(Icons.DOWNLOAD, 13));
         menuExportProject.setIcon(Icons.of(Icons.SAVE, 13));
         menuSendToLaser.setIcon(Icons.of(Icons.SEND, 13));
+        menuCutBoard.setIcon(Icons.of(Icons.STOP, 13));
 
         mGen.add(menuGenActive);
         mGen.add(menuGenAll);
@@ -218,6 +221,7 @@ public class MainWindow extends JFrame {
         mGen.add(menuExportProject);
         mGen.addSeparator();
         mGen.add(menuSendToLaser);
+        mGen.add(menuCutBoard);
 
         // Help
         JMenu mHelp = darkMenu("Help");

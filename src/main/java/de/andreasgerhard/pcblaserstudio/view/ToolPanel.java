@@ -1,6 +1,7 @@
 package de.andreasgerhard.pcblaserstudio.view;
 
 import de.andreasgerhard.pcblaserstudio.model.Layer;
+import de.andreasgerhard.pcblaserstudio.model.LayerType;
 import de.andreasgerhard.pcblaserstudio.service.GCodeGenerator;
 import de.andreasgerhard.pcblaserstudio.view.components.CollapsibleSection;
 import de.andreasgerhard.pcblaserstudio.view.panels.*;
@@ -69,6 +70,7 @@ public class ToolPanel extends JPanel {
         layerSettingsPanel.setLayer(layer);
         laserParametersPanel.setSettings(layer.getLaserSettings());
         gcodePrePostPanel.setLayer(layer);
+        gcodeGenerationPanel.setCutEnabled(layer.getType() == LayerType.ETCH);
     }
 
     public void updateGcodeStats(GCodeGenerator.GCodeResult result) {

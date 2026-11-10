@@ -71,6 +71,7 @@ public class LaserControlDialog extends JDialog {
     private String jobName = "GCODE";
     private String jobGcode;
     private long estimatedSeconds;
+    private boolean autoStartPending;
 
     private final Timer elapsedTimer;
     private long jobStartMillis;
@@ -241,11 +242,23 @@ public class LaserControlDialog extends JDialog {
 
     /** Loads the job to be sent. The user still has to press Start. */
     public void setJob(String name, String gcode, long estimatedSeconds) {
+        setJob(name, gcode, estimatedSeconds, false);
+    }
+
+    /**
+     * Loads the job to be sent.
+     *
+     * @param autoStart when true, starts the job as soon as a connection is
+     *                  available (immediately if already connected, otherwise
+     *                  after the next successful connect)
+     */
+    public void setJob(String name, String gcode, long estimatedSeconds, boolean autoStart) {
         this.jobName = name != null ? name : "GCODE";
         this.jobGcode = gcode;
         this.estimatedSeconds = Math.max(0, estimatedSeconds);
         this.lastAcked = 0;
         this.lastTotal = 0;
+        this.autoStartPending = autoStart;
 
         int lines = LaserStreamer.parseCommands(gcode).size();
         jobLabel.setText(String.format("%s  (%,d lines)", this.jobName, lines));
@@ -255,6 +268,25 @@ public class LaserControlDialog extends JDialog {
         etaLabel.setText(estimatedSeconds > 0
                 ? "ETA: " + formatDuration(estimatedSeconds) : "ETA: -");
         startBtn.setEnabled(true);
+
+        if (autoStart) {
+            // Let the caller make the dialog visible before streaming starts.
+            SwingUtilities.invokeLater(this::tryAutoStart);
+        }
+    }
+
+    /** True while a streaming job has not reached a terminal state. */
+    public boolean isJobRunning() {
+        return streamer != null && !isStreamingDone();
+    }
+
+    /** Starts a pending auto-start job once a connection is available. */
+    private void tryAutoStart() {
+        if (!autoStartPending) return;
+        if (connection == null || !connection.isOpen()) return;
+        if (isJobRunning()) return;
+        autoStartPending = false;
+        startJob(true);
     }
 
     // =================== Connection ===================
@@ -332,6 +364,9 @@ public class LaserControlDialog extends JDialog {
             connStatus.setText("Connected: " + connection.getPortDescription());
             appendConsole("--- connected: " + connection.getPortDescription() + " ---");
             startBtn.setEnabled(jobGcode != null);
+            if (autoStartPending) {
+                SwingUtilities.invokeLater(this::tryAutoStart);
+            }
         } catch (Exception ex) {
             log.error("Connect failed", ex);
             connection = null;
@@ -343,6 +378,7 @@ public class LaserControlDialog extends JDialog {
     }
 
     private void disconnect() {
+        autoStartPending = false;
         if (streamer != null && !isStreamingDone()) {
             streamer.stop();
         }
@@ -360,6 +396,16 @@ public class LaserControlDialog extends JDialog {
     // =================== Streaming ===================
 
     private void startJob() {
+        startJob(false);
+    }
+
+    private void startJob(boolean skipConfirm) {
+        if (isJobRunning()) {
+            JOptionPane.showMessageDialog(this,
+                    "A laser job is already running. Stop it first.",
+                    "Job Running", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
         if (jobGcode == null || jobGcode.isBlank()) {
             JOptionPane.showMessageDialog(this, "No GCODE to send.", "Nothing to Send",
                     JOptionPane.WARNING_MESSAGE);
@@ -370,7 +416,7 @@ public class LaserControlDialog extends JDialog {
                     JOptionPane.WARNING_MESSAGE);
             return;
         }
-        if (!confirmSend()) return;
+        if (!skipConfirm && !confirmSend()) return;
 
         streamer = new LaserStreamer(connection, jobGcode, new UiStreamListener());
         lastAcked = 0;

@@ -8,6 +8,7 @@ public class Project {
     private ProjectMetadata metadata;
     private LaserSettings laserSettings;
     private BoardSettings boardSettings;
+    private CutSettings cutSettings;
     private List<Layer> layers;
     private GlobalGcode globalGcode;
     private String filePath; // transient - not serialized
@@ -16,6 +17,7 @@ public class Project {
         this.metadata = new ProjectMetadata();
         this.laserSettings = new LaserSettings();
         this.boardSettings = new BoardSettings();
+        this.cutSettings = new CutSettings();
         this.globalGcode = new GlobalGcode();
         this.layers = new ArrayList<>();
         initDefaultLayers();
@@ -41,6 +43,9 @@ public class Project {
 
     public BoardSettings getBoardSettings() { return boardSettings; }
     public void setBoardSettings(BoardSettings boardSettings) { this.boardSettings = boardSettings; }
+
+    public CutSettings getCutSettings() { return cutSettings; }
+    public void setCutSettings(CutSettings cutSettings) { this.cutSettings = cutSettings; }
 
     public List<Layer> getLayers() { return layers; }
     public void setLayers(List<Layer> layers) { this.layers = layers; }
