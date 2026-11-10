@@ -36,8 +36,8 @@ public class GCodeGenerator {
      * @param borderSegments  board-border pass segments (exact SVG bounding box), empty if disabled
      * @param contentWidthMm  physical width of the SVG canvas (same coordinate space as segments)
      * @param contentHeightMm physical height of the SVG canvas
-     * @param offsetXMm     final X offset actually used (board position + margin-based anchor)
-     * @param offsetYMm     final Y offset actually used (board position + margin-based anchor)
+     * @param offsetXMm     X of the SVG canvas's lower-left corner in machine coordinates
+     * @param offsetYMm     Y of the SVG canvas's lower-left corner in machine coordinates
      * @param mirrorX       whether the rendered artwork was mirrored horizontally for this layer
      * @param mirrorY       whether the rendered artwork was mirrored vertically for this layer
      */
@@ -122,7 +122,10 @@ public class GCodeGenerator {
         double contentHeightMm = documentBounds.heightMm();
         double pxPerMm         = actualW / contentWidthMm;
 
-        // ── 2b. Final offset: board position + margin-based anchor ──────────
+        // ── 2b. Final offset: canvas lower-left corner in machine coords ─────
+        // Machine/work coordinates are bottom-left origin with +Y pointing
+        // away from the operator. appendSegments() therefore inverts the
+        // top-down image Y when emitting G-code.
         double offsetXMm, offsetYMm;
         if (boardSettings != null) {
             BoardAlignmentService.Offset base = BoardAlignmentService.computeBaseOffset(
@@ -185,7 +188,7 @@ public class GCodeGenerator {
         sb.append(String.format(Locale.ENGLISH,
                 "; Feed: %d mm/min, Power: %.0f%%\n", feedRate, ls.getPowerPercent()));
         sb.append(String.format(Locale.ENGLISH,
-                "; Offset: X=%.3f mm, Y=%.3f mm%s\n\n",
+                "; Canvas lower-left: X=%.3f mm, Y=%.3f mm%s\n\n",
                 offsetXMm, offsetYMm, boardSettings != null ? " (board position + margin)" : ""));
 
         // Pre-GCODE
@@ -481,8 +484,13 @@ public class GCodeGenerator {
 
         for (int[][] seg : segs) {
             int[] p1 = seg[0], p2 = seg[1];
-            double x1mm = p1[0] * mmPerPxX + offsetXMm, y1mm = p1[1] * mmPerPxY + offsetYMm;
-            double x2mm = p2[0] * mmPerPxX + offsetXMm, y2mm = p2[1] * mmPerPxY + offsetYMm;
+            // Image rows are top-down; machine Y is bottom-up. Flip the row
+            // coordinate so image row 0 (canvas top) maps to offsetY + svgH
+            // and the last row (canvas bottom) maps to offsetY.
+            double x1mm = p1[0] * mmPerPxX + offsetXMm;
+            double y1mm = offsetYMm + (svgH - p1[1] * mmPerPxY);
+            double x2mm = p2[0] * mmPerPxX + offsetXMm;
+            double y2mm = offsetYMm + (svgH - p2[1] * mmPerPxY);
 
             boolean needsMove = lastPos == null || lastPos[0] != p1[0] || lastPos[1] != p1[1];
             if (needsMove) {

@@ -62,19 +62,23 @@ public class BoardSettingsDialog extends JDialog {
 
         form.add(DarkTheme.createLabel("Margin:"), "");
         spnMargin = createMmSpinner(5.0);
-        spnMargin.setToolTipText("Distance from the board edge to the SVG content on the anchored sides");
+        spnMargin.setToolTipText(
+                "<html>Distance from the board's left/bottom edge to the SVG canvas<br>" +
+                "on the anchored sides.</html>");
         form.add(spnMargin, "split 2, w 100!");
         form.add(DarkTheme.createDimLabel("mm"), "wrap");
 
-        form.add(DarkTheme.createLabel("Position:"), "");
+        form.add(DarkTheme.createLabel("Board pos.:"), "");
         spnPositionX = createPositionSpinner(0.0);
         spnPositionX.setToolTipText(
-                "<html>X position of the board's bottom-left corner on the machine bed (mm).<br>" +
-                "Shifts the whole board - and everything burned on it - together.</html>");
+                "<html>X position of the board's bottom-left corner in machine coordinates (mm).<br>" +
+                "The machine/work origin must be bottom-left, with +Y pointing away from you.<br>" +
+                "The SVG canvas is placed inside the board according to Margin.</html>");
         spnPositionY = createPositionSpinner(0.0);
         spnPositionY.setToolTipText(
-                "<html>Y position of the board's bottom-left corner on the machine bed (mm).<br>" +
-                "Shifts the whole board - and everything burned on it - together.</html>");
+                "<html>Y position of the board's bottom-left corner in machine coordinates (mm).<br>" +
+                "The machine/work origin must be bottom-left, with +Y pointing away from you.<br>" +
+                "The SVG canvas is placed inside the board according to Margin.</html>");
         JPanel positionRow = new JPanel(new MigLayout("insets 0, fillx, gapx 4", "[16][grow][16][grow]", ""));
         positionRow.setOpaque(false);
         positionRow.add(DarkTheme.createDimLabel("X:"));

@@ -37,6 +37,11 @@ public class BoardAlignmentService {
      * given physical size: the board's position on the machine bed (the
      * bottom-left corner of the whole board) plus the margin-based anchor
      * within the board, mirrored for the back side per the flip axis.
+     *
+     * <p>The returned point is the content's <b>lower-left</b> corner in
+     * machine coordinates (origin bottom-left, +X right, +Y away from the
+     * operator). G-code generation maps the top-down SVG image rows onto this
+     * point with a Y inversion.</p>
      */
     public static Offset computeBaseOffset(BoardSettings board, LayerSide side,
                                             double contentWidthMm, double contentHeightMm) {
@@ -54,6 +59,34 @@ public class BoardAlignmentService {
             double y = board.getHeightMm() - margin - contentHeightMm;
             return new Offset(posX + margin, posY + y);
         }
+    }
+
+    /**
+     * Converts a content lower-left machine position into the board-local
+     * top-left position used by the screen-space previews (board origin at
+     * its top-left, Java2D Y pointing down). The machine bed position is
+     * removed so the preview stays board-local.
+     */
+    public static Offset toBoardTopLeft(BoardSettings board,
+                                        double contentLowerLeftXMm,
+                                        double contentLowerLeftYMm,
+                                        double contentHeightMm) {
+        double x = contentLowerLeftXMm - board.getPositionXMm();
+        double y = board.getHeightMm()
+                - (contentLowerLeftYMm - board.getPositionYMm())
+                - contentHeightMm;
+        return new Offset(x, y);
+    }
+
+    /**
+     * Convenience overload for the previews: computes the machine-space
+     * placement for the given side first, then converts it to the
+     * board-local top-left screen position.
+     */
+    public static Offset computeContentTopLeftInBoard(BoardSettings board, LayerSide side,
+                                                       double contentWidthMm, double contentHeightMm) {
+        Offset lowerLeft = computeBaseOffset(board, side, contentWidthMm, contentHeightMm);
+        return toBoardTopLeft(board, lowerLeft.xMm(), lowerLeft.yMm(), contentHeightMm);
     }
 
     /**

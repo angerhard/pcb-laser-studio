@@ -18,6 +18,7 @@ import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -214,10 +215,12 @@ public class SvgCanvas extends JPanel {
         boardHeightPx = boardSettings.getHeightMm() * pxPerMmY;
 
         LayerSide side  = layer != null ? layer.getSide() : LayerSide.FRONT;
-        BoardAlignmentService.Offset base = BoardAlignmentService.computeBaseOffset(
+        // The preview is board-local (board at 0,0, Java2D Y down), so use the
+        // content's board-local top-left corner - not the machine-bed offset.
+        BoardAlignmentService.Offset topLeft = BoardAlignmentService.computeContentTopLeftInBoard(
                 boardSettings, side, db.widthMm(), db.heightMm());
-        offsetXPx = base.xMm() * pxPerMmX;
-        offsetYPx = base.yMm() * pxPerMmY;
+        offsetXPx = topLeft.xMm() * pxPerMmX;
+        offsetYPx = topLeft.yMm() * pxPerMmY;
 
         if (side == LayerSide.BACK && boardSettings.isMirrorBackArtwork()) {
             if (boardSettings.getFlipAxis() == FlipAxis.VERTICAL) mirrorX = true;
@@ -349,8 +352,20 @@ public class SvgCanvas extends JPanel {
         if (svgImage != null) {
             g.setColor(DarkTheme.TEXT_DIM);
             g.setFont(DarkTheme.FONT_SMALL);
-            g.drawString(String.format("Zoom: %.0f%%", zoom * 100), 8, getHeight() - 8);
+            g.drawString(String.format(Locale.ENGLISH, "Zoom: %.0f%%", zoom * 100),
+                    8, getHeight() - 8);
+            drawBoardPositionLabel(g);
         }
+    }
+
+    /** Shows the board's machine-bed position; the preview itself stays board-local. */
+    private void drawBoardPositionLabel(Graphics g) {
+        if (boardSettings == null) return;
+        g.setColor(DarkTheme.TEXT_DIM);
+        g.setFont(DarkTheme.FONT_SMALL);
+        g.drawString(String.format(Locale.ENGLISH,
+                "Board position: X=%.2f mm, Y=%.2f mm",
+                boardSettings.getPositionXMm(), boardSettings.getPositionYMm()), 8, 16);
     }
 
     private void drawDropZone(Graphics2D g2) {

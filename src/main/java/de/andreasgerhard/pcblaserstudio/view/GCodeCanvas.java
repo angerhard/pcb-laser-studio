@@ -1,6 +1,7 @@
 package de.andreasgerhard.pcblaserstudio.view;
 
 import de.andreasgerhard.pcblaserstudio.model.BoardSettings;
+import de.andreasgerhard.pcblaserstudio.service.BoardAlignmentService;
 import de.andreasgerhard.pcblaserstudio.service.GCodeGenerator;
 import de.andreasgerhard.pcblaserstudio.view.theme.DarkTheme;
 import org.slf4j.Logger;
@@ -11,6 +12,7 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
+import java.util.Locale;
 import java.util.function.Consumer;
 
 /**
@@ -147,8 +149,15 @@ public class GCodeCanvas extends JPanel {
         double pxPerMmY = imgHeight / gcodeResult.contentHeightMm();
         boardWidthPx  = boardSettings.getWidthMm()  * pxPerMmX;
         boardHeightPx = boardSettings.getHeightMm() * pxPerMmY;
-        offsetXPx = gcodeResult.offsetXMm() * pxPerMmX;
-        offsetYPx = gcodeResult.offsetYMm() * pxPerMmY;
+
+        // The G-code result stores the canvas lower-left in machine coordinates.
+        // The preview is board-local (board at 0,0, Java2D Y down), so convert.
+        BoardAlignmentService.Offset topLeft = BoardAlignmentService.toBoardTopLeft(
+                boardSettings,
+                gcodeResult.offsetXMm(), gcodeResult.offsetYMm(),
+                gcodeResult.contentHeightMm());
+        offsetXPx = topLeft.xMm() * pxPerMmX;
+        offsetYPx = topLeft.yMm() * pxPerMmY;
     }
 
     public void setShowOutlines(boolean show) { showOutlines = show; repaint(); }
@@ -229,11 +238,17 @@ public class GCodeCanvas extends JPanel {
 
         g2.dispose();
 
-        // Zoom overlay
+        // Zoom and board-position overlays
         if (imgWidth > 0) {
             g.setColor(DarkTheme.TEXT_DIM);
             g.setFont(DarkTheme.FONT_SMALL);
-            g.drawString(String.format("Zoom: %.0f%%", zoom * 100), 8, getHeight() - 8);
+            g.drawString(String.format(Locale.ENGLISH, "Zoom: %.0f%%", zoom * 100),
+                    8, getHeight() - 8);
+            if (boardSettings != null) {
+                g.drawString(String.format(Locale.ENGLISH,
+                        "Board position: X=%.2f mm, Y=%.2f mm",
+                        boardSettings.getPositionXMm(), boardSettings.getPositionYMm()), 8, 16);
+            }
         }
     }
 
